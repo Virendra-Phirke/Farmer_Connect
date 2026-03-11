@@ -1,5 +1,5 @@
 import { UserButton, useUser } from "@clerk/clerk-react";
-import { Tractor, Bell } from "lucide-react";
+import { Tractor, Bell, ArrowLeft, Home } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useEffect, useState } from "react";
@@ -134,7 +134,15 @@ const DashboardLayout = ({ children, subtitle }: DashboardLayoutProps) => {
                 </div>
             </nav>
 
-            <main className="container mx-auto px-4 py-12">
+            <main className="container mx-auto px-4 py-8">
+                <div className="flex items-center gap-3 mb-6">
+                    <Button variant="outline" size="sm" onClick={() => navigate(-1)} className="text-muted-foreground">
+                        <ArrowLeft className="h-4 w-4 mr-2" /> Back
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => navigate(role ? rolePaths[role] : "/")} className="text-muted-foreground">
+                        <Home className="h-4 w-4 mr-2" /> Home
+                    </Button>
+                </div>
                 <h1 className="font-display text-3xl md:text-4xl font-bold text-foreground mb-2">
                     Welcome, {user?.firstName || "User"}
                 </h1>
