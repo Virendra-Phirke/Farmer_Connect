@@ -1,6 +1,6 @@
 import { UserButton, useUser } from "@clerk/clerk-react";
 import { Tractor, Bell, ArrowLeft, Home } from "lucide-react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useEffect, useState } from "react";
 import { getProfileId } from "@/lib/supabase-auth";
@@ -32,6 +32,10 @@ const DashboardLayout = ({ children, subtitle }: DashboardLayoutProps) => {
     const { user } = useUser();
     const { role } = useUserRole();
     const navigate = useNavigate();
+    const location = useLocation();
+
+    // Check if we are on one of the main dashboard pages
+    const isDashboardRoot = location.pathname.includes("-dashboard");
 
     const [profileId, setProfileId] = useState<string | null>(null);
     useEffect(() => {
@@ -136,9 +140,11 @@ const DashboardLayout = ({ children, subtitle }: DashboardLayoutProps) => {
 
             <main className="container mx-auto px-4 py-8">
                 <div className="flex items-center gap-3 mb-6">
-                    <Button variant="outline" size="sm" onClick={() => navigate(-1)} className="text-muted-foreground">
-                        <ArrowLeft className="h-4 w-4 mr-2" /> Back
-                    </Button>
+                    {!isDashboardRoot && (
+                        <Button variant="outline" size="sm" onClick={() => navigate(-1)} className="text-muted-foreground">
+                            <ArrowLeft className="h-4 w-4 mr-2" /> Back
+                        </Button>
+                    )}
                     <Button variant="outline" size="sm" onClick={() => navigate(role ? rolePaths[role] : "/")} className="text-muted-foreground">
                         <Home className="h-4 w-4 mr-2" /> Home
                     </Button>
