@@ -1,0 +1,116 @@
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700;800&family=Source+Sans+3:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 45 30% 97%;
+    --foreground: 150 25% 12%;
+
+    --card: 45 25% 95%;
+    --card-foreground: 150 25% 12%;
+
+    --popover: 45 30% 97%;
+    --popover-foreground: 150 25% 12%;
+
+    --primary: 145 45% 28%;
+    --primary-foreground: 45 30% 97%;
+
+    --secondary: 42 70% 55%;
+    --secondary-foreground: 150 25% 12%;
+
+    --muted: 45 20% 90%;
+    --muted-foreground: 150 10% 45%;
+
+    --accent: 42 70% 55%;
+    --accent-foreground: 150 25% 12%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 45 20% 85%;
+    --input: 45 20% 85%;
+    --ring: 145 45% 28%;
+
+    --radius: 0.75rem;
+
+    --sidebar-background: 150 20% 15%;
+    --sidebar-foreground: 45 25% 92%;
+    --sidebar-primary: 42 70% 55%;
+    --sidebar-primary-foreground: 150 25% 12%;
+    --sidebar-accent: 150 15% 22%;
+    --sidebar-accent-foreground: 45 25% 92%;
+    --sidebar-border: 150 15% 25%;
+    --sidebar-ring: 42 70% 55%;
+
+    /* Custom tokens */
+    --earth: 30 35% 30%;
+    --earth-foreground: 45 30% 97%;
+    --leaf: 120 35% 40%;
+    --leaf-foreground: 45 30% 97%;
+    --wheat: 42 85% 65%;
+    --wheat-foreground: 150 25% 12%;
+    --cream: 45 40% 94%;
+    --hero-overlay: 150 30% 10%;
+  }
+
+  .dark {
+    --background: 150 20% 8%;
+    --foreground: 45 25% 92%;
+    --card: 150 18% 12%;
+    --card-foreground: 45 25% 92%;
+    --popover: 150 18% 12%;
+    --popover-foreground: 45 25% 92%;
+    --primary: 145 50% 40%;
+    --primary-foreground: 150 20% 8%;
+    --secondary: 42 65% 50%;
+    --secondary-foreground: 150 20% 8%;
+    --muted: 150 15% 18%;
+    --muted-foreground: 45 15% 60%;
+    --accent: 42 65% 50%;
+    --accent-foreground: 150 20% 8%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 150 15% 20%;
+    --input: 150 15% 20%;
+    --ring: 145 50% 40%;
+    --sidebar-background: 150 20% 6%;
+    --sidebar-foreground: 45 25% 92%;
+    --sidebar-primary: 42 65% 50%;
+    --sidebar-primary-foreground: 150 20% 8%;
+    --sidebar-accent: 150 15% 12%;
+    --sidebar-accent-foreground: 45 25% 92%;
+    --sidebar-border: 150 15% 15%;
+    --sidebar-ring: 42 65% 50%;
+    --earth: 30 30% 45%;
+    --earth-foreground: 45 30% 97%;
+    --leaf: 120 35% 50%;
+    --leaf-foreground: 45 30% 97%;
+    --wheat: 42 80% 60%;
+    --wheat-foreground: 150 25% 12%;
+    --cream: 150 15% 15%;
+    --hero-overlay: 150 30% 5%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-body antialiased;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-display;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}

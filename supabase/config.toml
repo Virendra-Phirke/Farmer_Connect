@@ -1,0 +1,7 @@
+project_id = "malfnaqoywdxuqyergjp"
+
+[functions.sync-clerk-user]
+verify_jwt = false
+
+[functions.set-user-role]
+verify_jwt = false

@@ -1,0 +1,114 @@
+import { useEffect, useState } from "react";
+import { useUser } from "@clerk/clerk-react";
+import { getProfileId } from "@/lib/supabase-auth";
+import { useSupplyContracts, useUpdateSupplyContract } from "@/hooks/useSupplyContracts";
+import DashboardLayout from "@/components/DashboardLayout";
+import { Loader2, FileText, Check, X, Clock } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
+
+const SupplyContractsPage = () => {
+    const { user } = useUser();
+    const [profileId, setProfileId] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (user?.id) getProfileId(user.id).then(setProfileId);
+    }, [user?.id]);
+
+    const { data: contracts, isLoading } = useSupplyContracts(profileId ? { buyer_id: profileId } : undefined);
+    const updateMutation = useUpdateSupplyContract();
+
+    const pendingContracts = contracts?.filter((c: any) => c.status === "pending") || [];
+    const historyContracts = contracts?.filter((c: any) => c.status !== "pending") || [];
+
+    const handleAccept = (id: string) => {
+        updateMutation.mutate({ id, updates: { status: "active" } }, {
+            onSuccess: () => toast.success("Supply contract accepted and activated!")
+        });
+    };
+
+    const handleReject = (id: string) => {
+        updateMutation.mutate({ id, updates: { status: "cancelled" } }, {
+            onSuccess: () => toast.success("Supply contract proposal rejected.")
+        });
+    };
+
+    const getStatusBadge = (status: string) => {
+        switch (status) {
+            case "active": return <span className="inline-flex items-center gap-1 text-green-600 bg-green-50 px-2 py-1 rounded-md text-sm font-medium"><Check className="h-4 w-4" /> Active</span>;
+            case "cancelled": return <span className="inline-flex items-center gap-1 text-red-600 bg-red-50 px-2 py-1 rounded-md text-sm font-medium"><X className="h-4 w-4" /> Cancelled</span>;
+            case "completed": return <span className="inline-flex items-center gap-1 text-blue-600 bg-blue-50 px-2 py-1 rounded-md text-sm font-medium"><Check className="h-4 w-4" /> Completed</span>;
+            case "paused": return <span className="inline-flex items-center gap-1 text-yellow-600 bg-yellow-50 px-2 py-1 rounded-md text-sm font-medium"><Clock className="h-4 w-4" /> Paused</span>;
+            default: return <span className="inline-flex items-center gap-1 text-gray-600 bg-gray-50 px-2 py-1 rounded-md text-sm font-medium">{status.charAt(0).toUpperCase() + status.slice(1)}</span>;
+        }
+    }
+
+    return (
+        <DashboardLayout subtitle="Review and manage supply contract proposals from farmers.">
+            <div className="space-y-6">
+                <h2 className="text-xl font-bold flex items-center gap-2"><FileText className="h-6 w-6" /> Supply Contracts</h2>
+
+                {isLoading ? (
+                    <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
+                ) : (
+                    <Tabs defaultValue="pending" className="w-full">
+                        <TabsList className="mb-6 grid w-full grid-cols-2 md:w-[400px]">
+                            <TabsTrigger value="pending">Pending Proposals ({pendingContracts.length})</TabsTrigger>
+                            <TabsTrigger value="history">History ({historyContracts.length})</TabsTrigger>
+                        </TabsList>
+
+                        <TabsContent value="pending">
+                            {!pendingContracts.length ? (
+                                <div className="bg-card rounded-xl border border-border p-12 text-center text-muted-foreground">No pending supply contract proposals.</div>
+                            ) : (
+                                <div className="space-y-4">
+                                    {pendingContracts.map((contract: any) => (
+                                        <div key={contract.id} className="bg-card rounded-xl border border-border p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                            <div>
+                                                <p className="font-semibold text-lg">{contract.crop_name} <span className="text-muted-foreground font-normal text-sm">from {contract.farmer?.full_name || "Unknown Farmer"}</span></p>
+                                                <div className="grid grid-cols-2 gap-x-8 gap-y-1 mt-2 text-sm">
+                                                    <p><span className="text-muted-foreground">Quantity:</span> {contract.quantity_kg_per_delivery}kg / {contract.delivery_frequency}</p>
+                                                    <p><span className="text-muted-foreground">Duration:</span> {new Date(contract.start_date).toLocaleDateString()} - {new Date(contract.end_date).toLocaleDateString()}</p>
+                                                </div>
+                                            </div>
+                                            <div className="flex gap-2 shrink-0">
+                                                <Button size="sm" onClick={() => handleAccept(contract.id)} disabled={updateMutation.isPending}><Check className="mr-1 h-4 w-4" /> Accept Proposal</Button>
+                                                <Button size="sm" variant="outline" onClick={() => handleReject(contract.id)} disabled={updateMutation.isPending}><X className="mr-1 h-4 w-4" /> Reject</Button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </TabsContent>
+
+                        <TabsContent value="history">
+                            {!historyContracts.length ? (
+                                <div className="bg-card rounded-xl border border-border p-12 text-center text-muted-foreground">No supply contract history found.</div>
+                            ) : (
+                                <div className="space-y-4">
+                                    {historyContracts.map((contract: any) => (
+                                        <div key={contract.id} className="bg-card border border-border p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 opacity-80">
+                                            <div>
+                                                <p className="font-semibold text-lg">{contract.crop_name} <span className="text-muted-foreground font-normal text-sm">from {contract.farmer?.full_name || "Unknown Farmer"}</span></p>
+                                                <div className="grid grid-cols-2 gap-x-8 gap-y-1 mt-2 text-sm">
+                                                    <p><span className="text-muted-foreground">Quantity:</span> {contract.quantity_kg_per_delivery}kg / {contract.delivery_frequency}</p>
+                                                    <p><span className="text-muted-foreground">Duration:</span> {new Date(contract.start_date).toLocaleDateString()} - {new Date(contract.end_date).toLocaleDateString()}</p>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                {getStatusBadge(contract.status)}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </TabsContent>
+                    </Tabs>
+                )}
+            </div>
+        </DashboardLayout>
+    );
+};
+
+export default SupplyContractsPage;
