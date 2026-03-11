@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useUser } from "@clerk/clerk-react";
 import { getProfileId } from "@/lib/supabase-auth";
-import { useFarmerGroups, useJoinFarmerGroup, useLeaveFarmerGroup, useCreateFarmerGroup, useDeleteFarmerGroup } from "@/hooks/useFarmerGroups";
+import { useFarmerGroups, useJoinFarmerGroup, useLeaveFarmerGroup, useCreateFarmerGroup, useDeleteFarmerGroup, useRequestToJoinFarmerGroup } from "@/hooks/useFarmerGroups";
 import { useFarmerProfile } from "@/hooks/useFarmerProfile";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
@@ -36,6 +36,7 @@ const FarmerGroupsPage = () => {
     const leaveMutation = useLeaveFarmerGroup();
     const createGroupMutation = useCreateFarmerGroup();
     const deleteGroupMutation = useDeleteFarmerGroup();
+    const requestJoinMutation = useRequestToJoinFarmerGroup();
 
     const availableDistricts = data.districts
         .filter((d: any) => d.state === newGroup.state)
@@ -61,11 +62,11 @@ const FarmerGroupsPage = () => {
         });
     };
 
-    const handleJoin = (groupId: string) => {
+    const handleRequestJoin = (groupId: string) => {
         if (!profileId) return;
-        joinMutation.mutate({ groupId, profileId }, {
-            onSuccess: () => toast.success("Joined group!"),
-            onError: () => toast.error("Failed to join"),
+        requestJoinMutation.mutate({ groupId, profileId }, {
+            onSuccess: () => toast.success("Request sent successfully!"),
+            onError: (err: any) => toast.error(err.message || "Failed to send request"),
         });
     };
 
@@ -162,17 +163,9 @@ const FarmerGroupsPage = () => {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {groups.map((group: any) => {
                             const isMember = group.farmer_group_members?.some((m: any) => m.profile_id === profileId);
+                            const hasRequested = group.requests?.some((r: any) => r.profile_id === profileId && r.status === 'pending');
                             const locationStr = [group.village, group.taluka, group.district, group.state].filter(Boolean).join(", ") || group.region;
 
-                            // Check if current user is eligible to join based on location
-                            const isEligibleLocation =
-                                farmerProfile &&
-                                group.state && group.district && group.taluka &&
-                                farmerProfile.state?.toLowerCase() === group.state.toLowerCase() &&
-                                farmerProfile.district?.toLowerCase() === group.district.toLowerCase() &&
-                                farmerProfile.taluka?.toLowerCase() === group.taluka.toLowerCase();
-
-                            const hasLocationData = group.state && group.district && group.taluka;
                             const isCreator = group.created_by === profileId;
 
                             return (
@@ -182,6 +175,7 @@ const FarmerGroupsPage = () => {
                                     <div className="flex gap-3 text-xs text-muted-foreground mb-4">
                                         <span>📍 {locationStr}</span>
                                         <span>👥 {group.farmer_group_members?.length || 0} members</span>
+                                        {hasRequested && <span className="text-yellow-500 font-medium">⏳ Join Requested</span>}
                                     </div>
                                     {isMember ? (
                                         <div className="flex flex-wrap gap-2">
@@ -199,13 +193,13 @@ const FarmerGroupsPage = () => {
                                         </div>
                                     ) : (
                                         <>
-                                            {isEligibleLocation || !hasLocationData ? (
-                                                <Button size="sm" onClick={() => handleJoin(group.id)} disabled={joinMutation.isPending}>
-                                                    <LogIn className="mr-2 h-4 w-4" /> Join Group
+                                            {hasRequested ? (
+                                                <Button size="sm" variant="secondary" disabled className="opacity-70">
+                                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Request Pending
                                                 </Button>
                                             ) : (
-                                                <Button size="sm" variant="secondary" disabled className="opacity-70">
-                                                    <Lock className="mr-2 h-4 w-4" /> Not in your area
+                                                <Button size="sm" onClick={() => handleRequestJoin(group.id)} disabled={requestJoinMutation.isPending}>
+                                                    <LogIn className="mr-2 h-4 w-4" /> Request to Join
                                                 </Button>
                                             )}
                                         </>

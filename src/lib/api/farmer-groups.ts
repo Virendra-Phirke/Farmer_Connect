@@ -17,9 +17,22 @@ export type FarmerGroup = {
 
 export type FarmerGroupInsert = Omit<FarmerGroup, "id" | "created_at"> & {
   state?: string | null;
-  district?: string | null;
   taluka?: string | null;
   village?: string | null;
+};
+
+export type FarmerGroupRequest = {
+  id: string;
+  group_id: string;
+  profile_id: string;
+  status: 'pending' | 'accepted' | 'rejected';
+  created_at: string;
+  profile?: {
+    id: string;
+    full_name: string | null;
+    location: string | null;
+    avatar_url: string | null;
+  };
 };
 
 export async function getFarmerGroups(filters?: {
@@ -36,7 +49,8 @@ export async function getFarmerGroups(filters?: {
         full_name,
         avatar_url
       ),
-      farmer_group_members(profile_id)
+      farmer_group_members(profile_id),
+      requests:farmer_group_requests(profile_id, status)
     `)
     .order("created_at", { ascending: false });
 
@@ -81,7 +95,8 @@ export async function getFarmerGroupById(id: string) {
           location,
           avatar_url
         )
-      )
+      ),
+      requests:farmer_group_requests(profile_id, status)
     `)
     .eq("id", id)
     .maybeSingle();
@@ -179,6 +194,74 @@ export async function joinFarmerGroup(groupId: string, profileId: string) {
   if (error) {
     console.error("Error joining farmer group:", error);
     throw error;
+  }
+
+  return data;
+}
+
+export async function requestToJoinFarmerGroup(groupId: string, profileId: string) {
+  const { data, error } = await supabase
+    .from("farmer_group_requests")
+    .insert({
+      group_id: groupId,
+      profile_id: profileId,
+      status: 'pending'
+    })
+    .select()
+    .single();
+
+  if (error) {
+    if (error.code === '23505') { // Unique violation
+      console.error("Already requested to join this group.");
+      throw new Error("You have already requested to join this group.");
+    }
+    console.error("Error requesting to join farmer group:", error);
+    throw error;
+  }
+
+  return data;
+}
+
+export async function getFarmerGroupRequests(groupId: string) {
+  const { data, error } = await supabase
+    .from("farmer_group_requests")
+    .select(`
+      *,
+      profile:profiles!farmer_group_requests_profile_id_fkey(
+        id,
+        full_name,
+        location,
+        avatar_url
+      )
+    `)
+    .eq("group_id", groupId)
+    .eq("status", "pending")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("Error fetching farmer group requests:", error);
+    throw error;
+  }
+
+  return data as FarmerGroupRequest[];
+}
+
+export async function updateFarmerGroupRequest(requestId: string, status: 'accepted' | 'rejected', groupId?: string, profileId?: string) {
+  const { data, error } = await supabase
+    .from("farmer_group_requests")
+    .update({ status })
+    .eq("id", requestId)
+    .select()
+    .single();
+
+  if (error) {
+    console.error("Error updating farmer group request:", error);
+    throw error;
+  }
+
+  // If accepted, also add them to the group members
+  if (status === 'accepted' && groupId && profileId) {
+    await joinFarmerGroup(groupId, profileId);
   }
 
   return data;

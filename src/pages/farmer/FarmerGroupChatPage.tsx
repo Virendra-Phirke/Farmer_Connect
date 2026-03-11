@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useUser } from "@clerk/clerk-react";
 import { getProfileId } from "@/lib/supabase-auth";
-import { useFarmerGroup } from "@/hooks/useFarmerGroups";
+import { useFarmerGroup, useFarmerGroupRequests, useUpdateFarmerGroupRequest } from "@/hooks/useFarmerGroups";
 import { useGroupMessages, useSendGroupMessage, useDeleteGroupMessage } from "@/hooks/useFarmerGroupMessages";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,7 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
 
 const FarmerGroupChatPage = () => {
@@ -30,8 +31,10 @@ const FarmerGroupChatPage = () => {
 
     const { data: group, isLoading: groupLoading } = useFarmerGroup(id!);
     const { data: messages, isLoading: messagesLoading } = useGroupMessages(id!);
+    const { data: requests } = useFarmerGroupRequests(id!);
     const sendMessageMutation = useSendGroupMessage();
     const deleteMessageMutation = useDeleteGroupMessage();
+    const updateRequestMutation = useUpdateFarmerGroupRequest();
 
     // Hooks for admin actions
     const removeMemberMutation = { mutate: (args: any, config: any) => import("@/lib/api/farmer-groups").then(m => m.removeGroupMember(args.groupId, args.profileId).then(config.onSuccess).catch(config.onError)) };
@@ -82,6 +85,14 @@ const FarmerGroupChatPage = () => {
         }
     };
 
+    const handleRequestDecision = (requestId: string, status: 'accepted' | 'rejected', profileId?: string) => {
+        if (!id) return;
+        updateRequestMutation.mutate({ requestId, status, groupId: id, profileId }, {
+            onSuccess: () => toast.success(`Request ${status}`),
+            onError: () => toast.error("Failed to update request"),
+        });
+    };
+
     if (groupLoading || messagesLoading) {
         return (
             <DashboardLayout subtitle="Loading group chat...">
@@ -128,18 +139,60 @@ const FarmerGroupChatPage = () => {
                         <p className="text-sm opacity-90">{(group as any)?.members?.length || (group as any)?.farmer_group_members?.length || 0} members</p>
                     </div>
                     {isCreator && (
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon" className="text-primary-foreground hover:bg-primary/20">
-                                    <Settings className="h-5 w-5" />
-                                </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                                <DropdownMenuItem className="text-muted-foreground">
-                                    <Users className="mr-2 h-4 w-4" /> (Hover messages to remove members)
-                                </DropdownMenuItem>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
+                        <Dialog>
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="text-primary-foreground hover:bg-primary/20 relative">
+                                        <Settings className="h-5 w-5" />
+                                        {requests && requests.length > 0 && (
+                                            <span className="absolute top-0 right-0 h-3 w-3 rounded-full bg-red-500 animate-pulse border-2 border-background" />
+                                        )}
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                    <DialogTrigger asChild>
+                                        <DropdownMenuItem className="cursor-pointer">
+                                            <Users className="mr-2 h-4 w-4" /> Manage Requests ({requests?.length || 0})
+                                        </DropdownMenuItem>
+                                    </DialogTrigger>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+
+                            <DialogContent>
+                                <DialogHeader>
+                                    <DialogTitle>Join Requests</DialogTitle>
+                                </DialogHeader>
+                                <div className="space-y-4 pt-4">
+                                    {!requests || requests.length === 0 ? (
+                                        <p className="text-muted-foreground text-center">No pending requests.</p>
+                                    ) : (
+                                        requests.map((req) => (
+                                            <div key={req.id} className="flex items-center justify-between p-3 border border-border rounded-lg">
+                                                <div>
+                                                    <p className="font-medium text-sm">{req.profile?.full_name || "Unknown Farmer"}</p>
+                                                    <p className="text-xs text-muted-foreground">{req.profile?.location || "No location provided"}</p>
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        onClick={() => handleRequestDecision(req.id, 'rejected')}
+                                                    >
+                                                        Reject
+                                                    </Button>
+                                                    <Button
+                                                        size="sm"
+                                                        onClick={() => handleRequestDecision(req.id, 'accepted', req.profile_id)}
+                                                    >
+                                                        Accept
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            </DialogContent>
+                        </Dialog>
                     )}
                 </div>
                 {/* Messages Area */}

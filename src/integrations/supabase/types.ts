@@ -318,9 +318,41 @@ export type Database = {
             referencedRelation: "farmer_groups"
             referencedColumns: ["id"]
           },
+        ]
+      }
+      farmer_group_requests: {
+        Row: {
+          id: string
+          group_id: string
+          profile_id: string
+          status: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          group_id: string
+          profile_id: string
+          status?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          group_id?: string
+          profile_id?: string
+          status?: string
+          created_at?: string
+        }
+        Relationships: [
           {
-            foreignKeyName: "farmer_group_messages_sender_id_fkey"
-            columns: ["sender_id"]
+            foreignKeyName: "farmer_group_requests_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "farmer_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "farmer_group_requests_profile_id_fkey"
+            columns: ["profile_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]

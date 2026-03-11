@@ -8,6 +8,9 @@ import {
   joinFarmerGroup,
   leaveFarmerGroup,
   getUserGroups,
+  requestToJoinFarmerGroup,
+  getFarmerGroupRequests,
+  updateFarmerGroupRequest,
   FarmerGroupInsert,
 } from "@/lib/api";
 
@@ -96,6 +99,41 @@ export function useLeaveFarmerGroup() {
       queryClient.invalidateQueries({ queryKey: ["farmer-groups"] });
       queryClient.invalidateQueries({ queryKey: ["farmer-group"] });
       queryClient.invalidateQueries({ queryKey: ["user-groups"] });
+    },
+  });
+}
+
+export function useRequestToJoinFarmerGroup() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ groupId, profileId }: { groupId: string; profileId: string }) =>
+      requestToJoinFarmerGroup(groupId, profileId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["farmer-groups"] });
+      queryClient.invalidateQueries({ queryKey: ["farmer-group-requests"] });
+    },
+  });
+}
+
+export function useFarmerGroupRequests(groupId: string) {
+  return useQuery({
+    queryKey: ["farmer-group-requests", groupId],
+    queryFn: () => getFarmerGroupRequests(groupId),
+    enabled: !!groupId,
+  });
+}
+
+export function useUpdateFarmerGroupRequest() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ requestId, status, groupId, profileId }: { requestId: string; status: 'accepted' | 'rejected', groupId?: string, profileId?: string }) =>
+      updateFarmerGroupRequest(requestId, status, groupId, profileId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["farmer-group-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["farmer-groups"] });
+      queryClient.invalidateQueries({ queryKey: ["farmer-group"] });
     },
   });
 }
