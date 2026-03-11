@@ -3,12 +3,13 @@ import { useUser } from "@clerk/clerk-react";
 import { getProfileId } from "@/lib/supabase-auth";
 import { useFarmerGroups, useJoinFarmerGroup, useLeaveFarmerGroup, useCreateFarmerGroup, useDeleteFarmerGroup, useRequestToJoinFarmerGroup } from "@/hooks/useFarmerGroups";
 import { useFarmerProfile } from "@/hooks/useFarmerProfile";
+import { FarmerGroupInsert } from "@/lib/api";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Loader2, Users, LogIn, LogOut, MessageSquare, Plus, Lock, Trash } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -23,13 +24,14 @@ const FarmerGroupsPage = () => {
     const { user } = useUser();
     const [profileId, setProfileId] = useState<string | null>(null);
     const [isCreateOpen, setIsCreateOpen] = useState(false);
-    const [newGroup, setNewGroup] = useState({ name: "", description: "", state: "Maharashtra", district: "", taluka: "", village: "" });
+    const [newGroup, setNewGroup] = useState<Partial<FarmerGroupInsert>>({});
+    const [groupToLeave, setGroupToLeave] = useState<string | null>(null);
 
     useEffect(() => {
         if (user?.id) getProfileId(user.id).then(setProfileId);
     }, [user?.id]);
 
-    const { data: farmerProfile } = useFarmerProfile(profileId);
+    const { data: farmerProfile } = useFarmerProfile(profileId || "");
 
     const { data: groups, isLoading } = useFarmerGroups();
     const joinMutation = useJoinFarmerGroup();
@@ -52,7 +54,7 @@ const FarmerGroupsPage = () => {
             created_by: profileId,
             soil_type: null,
             crop_type: null
-        }, {
+        } as FarmerGroupInsert, {
             onSuccess: () => {
                 toast.success("Group created successfully!");
                 setIsCreateOpen(false);
@@ -70,11 +72,14 @@ const FarmerGroupsPage = () => {
         });
     };
 
-    const handleLeave = (groupId: string) => {
-        if (!profileId) return;
-        leaveMutation.mutate({ groupId, profileId }, {
-            onSuccess: () => toast.success("Left group"),
-            onError: () => toast.error("Failed to leave"),
+    const handleLeave = () => {
+        if (!groupToLeave) return;
+        leaveMutation.mutate({ groupId: groupToLeave, profileId: profileId! }, {
+            onSuccess: () => {
+                toast.success("Left group successfully");
+                setGroupToLeave(null);
+            },
+            onError: () => toast.error("Failed to leave group"),
         });
     };
 
@@ -182,7 +187,7 @@ const FarmerGroupsPage = () => {
                                             <Button size="sm" onClick={() => navigate(`/farmer/groups/${group.id}`)}>
                                                 <MessageSquare className="mr-2 h-4 w-4" /> Open Chat
                                             </Button>
-                                            <Button variant="outline" size="sm" onClick={() => handleLeave(group.id)} disabled={leaveMutation.isPending}>
+                                            <Button variant="outline" size="sm" onClick={() => setGroupToLeave(group.id)}>
                                                 <LogOut className="mr-2 h-4 w-4" /> Leave Group
                                             </Button>
                                             {isCreator && (
@@ -209,6 +214,25 @@ const FarmerGroupsPage = () => {
                         })}
                     </div>
                 )}
+
+                {/* Leave Group Confirmation Dialog */}
+                <Dialog open={!!groupToLeave} onOpenChange={(open) => !open && setGroupToLeave(null)}>
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>Leave Group</DialogTitle>
+                            <DialogDescription>
+                                Are you sure you want to leave this group? You will have to request to join again if you change your mind.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <DialogFooter>
+                            <Button variant="outline" onClick={() => setGroupToLeave(null)} disabled={leaveMutation.isPending}>Cancel</Button>
+                            <Button variant="destructive" onClick={handleLeave} disabled={leaveMutation.isPending}>
+                                {leaveMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <LogOut className="h-4 w-4 mr-2" />}
+                                Leave Group
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
             </div>
         </DashboardLayout>
     );

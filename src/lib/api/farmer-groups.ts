@@ -202,19 +202,15 @@ export async function joinFarmerGroup(groupId: string, profileId: string) {
 export async function requestToJoinFarmerGroup(groupId: string, profileId: string) {
   const { data, error } = await supabase
     .from("farmer_group_requests")
-    .insert({
+    .upsert({
       group_id: groupId,
       profile_id: profileId,
       status: 'pending'
-    })
+    }, { onConflict: 'group_id,profile_id' })
     .select()
     .single();
 
   if (error) {
-    if (error.code === '23505') { // Unique violation
-      console.error("Already requested to join this group.");
-      throw new Error("You have already requested to join this group.");
-    }
     console.error("Error requesting to join farmer group:", error);
     throw error;
   }

@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useUser } from "@clerk/clerk-react";
 import { getProfileId } from "@/lib/supabase-auth";
+import { encryptMessage, decryptMessage } from "@/lib/crypto";
 import { useFarmerGroup, useFarmerGroupRequests, useUpdateFarmerGroupRequest } from "@/hooks/useFarmerGroups";
 import { useGroupMessages, useSendGroupMessage, useDeleteGroupMessage } from "@/hooks/useFarmerGroupMessages";
 import DashboardLayout from "@/components/DashboardLayout";
@@ -56,7 +57,7 @@ const FarmerGroupChatPage = () => {
         sendMessageMutation.mutate({
             groupId: id,
             senderId: profileId,
-            content: newMessage.trim(),
+            content: encryptMessage(newMessage.trim(), id),
         }, {
             onSuccess: () => setNewMessage(""),
         });
@@ -211,7 +212,7 @@ const FarmerGroupChatPage = () => {
                                                     </Button>
                                                 </DropdownMenuTrigger>
                                                 <DropdownMenuContent align="end">
-                                                    <DropdownMenuItem onClick={() => handleCopy(msg.content)}>
+                                                    <DropdownMenuItem onClick={() => handleCopy(decryptMessage(msg.content, id!))}>
                                                         <Copy className="mr-2 h-4 w-4" /> Copy
                                                     </DropdownMenuItem>
                                                     <DropdownMenuItem onClick={() => handleDeleteMessage(msg.id)} className="text-destructive focus:text-destructive">
@@ -232,7 +233,7 @@ const FarmerGroupChatPage = () => {
                                                             </Button>
                                                         </DropdownMenuTrigger>
                                                         <DropdownMenuContent align="start">
-                                                            <DropdownMenuItem onClick={() => handleCopy(msg.content)}>
+                                                            <DropdownMenuItem onClick={() => handleCopy(decryptMessage(msg.content, id!))}>
                                                                 <Copy className="mr-2 h-4 w-4" /> Copy
                                                             </DropdownMenuItem>
                                                             {isCreator && (
@@ -253,7 +254,7 @@ const FarmerGroupChatPage = () => {
                                                 </p>
                                             </>
                                         )}
-                                        <p className="text-sm break-words">{msg.content}</p>
+                                        <p className="text-sm break-words">{decryptMessage(msg.content, id!)}</p>
                                         <p className="text-[10px] opacity-50 text-right mt-1">
                                             {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                         </p>
