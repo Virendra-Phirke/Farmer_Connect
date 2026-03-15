@@ -25,18 +25,26 @@ const BrowseEquipmentPage = () => {
     const { data: equipment, isLoading } = useEquipmentListings({ is_available: true });
     const createBooking = useCreateEquipmentBooking();
 
+    // Filter out equipment with 0 quantity
+    const availableEquipment = equipment?.filter((item: any) => item.quantity > 0) || [];
+
     const [selectedEquipment, setSelectedEquipment] = useState<any | null>(null);
     const [startDate, setStartDate] = useState("");
     const [endDate, setEndDate] = useState("");
     const [notes, setNotes] = useState("");
+    const [quantity, setQuantity] = useState("1");
 
     const handleRequest = () => {
-        if (!selectedEquipment || !startDate || !endDate || !profileId) return;
+        if (!selectedEquipment || !startDate || !endDate || !profileId || !quantity) {
+            toast.error("Please fill in all required fields");
+            return;
+        }
 
         const start = parseISO(startDate);
         const end = parseISO(endDate);
         const days = Math.max(0, differenceInDays(end, start)) + 1;
-        const totalPrice = days * selectedEquipment.price_per_day;
+        const qty = parseInt(quantity);
+        const totalPrice = days * selectedEquipment.price_per_day * qty;
 
         createBooking.mutate({
             equipment_id: selectedEquipment.id,
@@ -45,7 +53,8 @@ const BrowseEquipmentPage = () => {
             end_date: endDate,
             total_price: totalPrice,
             status: "pending",
-            notes: notes
+            notes: notes,
+            quantity: qty
         }, {
             onSuccess: () => {
                 toast.success(`Rental request sent for ${selectedEquipment.name}`);
@@ -53,6 +62,11 @@ const BrowseEquipmentPage = () => {
                 setStartDate("");
                 setEndDate("");
                 setNotes("");
+                setQuantity("1");
+            },
+            onError: (error: any) => {
+                console.error("Equipment booking error:", error);
+                toast.error(error?.message || "Failed to send rental request. Please try again.");
             }
         });
     };
@@ -64,11 +78,11 @@ const BrowseEquipmentPage = () => {
 
                 {isLoading ? (
                     <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
-                ) : !equipment?.length ? (
+                ) : !availableEquipment?.length ? (
                     <div className="bg-card rounded-xl border border-border p-12 text-center text-muted-foreground">No equipment available right now. Check back later!</div>
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {equipment.map((item: any) => (
+                        {availableEquipment.map((item: any) => (
                             <div key={item.id} className="bg-card rounded-xl border border-border p-6 hover:shadow-md transition-shadow">
                                 <div className="flex items-center gap-3 mb-4">
                                     <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center"><Tractor className="h-5 w-5 text-accent" /></div>
@@ -79,6 +93,7 @@ const BrowseEquipmentPage = () => {
                                 </div>
                                 <div className="flex items-center gap-1 text-sm text-muted-foreground mb-2"><MapPin className="h-3 w-3" /> {item.location || "Not specified"}</div>
                                 <p className="text-lg font-bold text-primary mb-2">₹{item.price_per_day}/day</p>
+                                <p className="text-sm text-muted-foreground mb-2">Available Units: <span className="font-semibold text-foreground">{item.quantity}</span></p>
                                 {item.description && <p className="text-sm text-muted-foreground mb-4">{item.description}</p>}
                                 <Button className="w-full" onClick={() => setSelectedEquipment(item)}>Request Rental</Button>
                             </div>
@@ -98,6 +113,10 @@ const BrowseEquipmentPage = () => {
 
                         <div className="grid gap-4 py-4">
                             <div className="grid grid-cols-4 items-center gap-4">
+                                <Label htmlFor="quantity" className="text-right">Quantity</Label>
+                                <Input id="quantity" type="number" className="col-span-3" value={quantity} onChange={e => setQuantity(e.target.value)} min="1" max={selectedEquipment?.quantity} />
+                            </div>
+                            <div className="grid grid-cols-4 items-center gap-4">
                                 <Label htmlFor="start-date" className="text-right">Start Date</Label>
                                 <Input id="start-date" type="date" className="col-span-3" value={startDate} onChange={e => setStartDate(e.target.value)} min={new Date().toISOString().split('T')[0]} />
                             </div>
@@ -109,16 +128,16 @@ const BrowseEquipmentPage = () => {
                                 <Label htmlFor="notes" className="text-right">Notes (Optional)</Label>
                                 <Input id="notes" placeholder="Any special requirements..." className="col-span-3" value={notes} onChange={e => setNotes(e.target.value)} />
                             </div>
-                            {startDate && endDate && (
+                            {startDate && endDate && quantity && (
                                 <div className="text-right text-sm text-muted-foreground mt-2">
-                                    Estimated Cost: <span className="font-bold text-foreground">₹{Math.max(0, differenceInDays(parseISO(endDate), parseISO(startDate)) + 1) * (selectedEquipment?.price_per_day || 0)}</span>
+                                    Estimated Cost: <span className="font-bold text-foreground">₹{Math.max(0, differenceInDays(parseISO(endDate), parseISO(startDate)) + 1) * (selectedEquipment?.price_per_day || 0) * parseInt(quantity)}</span>
                                 </div>
                             )}
                         </div>
 
                         <DialogFooter>
                             <Button variant="outline" onClick={() => setSelectedEquipment(null)}>Cancel</Button>
-                            <Button onClick={handleRequest} disabled={createBooking.isPending || !startDate || !endDate}>
+                            <Button onClick={handleRequest} disabled={createBooking.isPending || !startDate || !endDate || !quantity}>
                                 {createBooking.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                                 Submit Request
                             </Button>

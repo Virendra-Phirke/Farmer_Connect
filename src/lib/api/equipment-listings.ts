@@ -8,13 +8,14 @@ export type EquipmentListing = {
   category: string;
   price_per_day: number;
   location: string;
+  quantity: number;
   is_available: boolean;
   image_url: string | null;
   created_at: string;
   updated_at: string;
 };
 
-export type EquipmentListingInsert = Omit<EquipmentListing, "id" | "created_at" | "updated_at">;
+export type EquipmentListingInsert = Omit<EquipmentListing, "id" | "created_at" | "updated_at" | "is_available">;
 
 export async function getEquipmentListings(filters?: {
   is_available?: boolean;

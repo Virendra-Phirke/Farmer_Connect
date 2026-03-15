@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getMessaging, getToken, onMessage } from "firebase/messaging";
+import { getMessaging, getToken, onMessage, isSupported, type MessagePayload } from "firebase/messaging";
 
 const firebaseConfig = {
     apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "dummy",
@@ -12,13 +12,53 @@ const firebaseConfig = {
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
-export const messaging = getMessaging(app);
+
+const getValidVapidKey = () => {
+    const key = (import.meta.env.VITE_FIREBASE_VAPID_KEY || "").trim();
+    if (!key || key === "dummy_vapid_key") return null;
+    // VAPID public keys are URL-safe base64 strings and typically long.
+    if (key.length < 60) return null;
+    return key;
+};
+
+const canUseMessaging = async () => {
+    if (typeof window === "undefined") return false;
+    if (!window.isSecureContext) return false;
+    if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
+        return false;
+    }
+    return isSupported();
+};
+
+const getMessagingInstance = async () => {
+    const supported = await canUseMessaging();
+    if (!supported) return null;
+    return getMessaging(app);
+};
 
 export const requestFirebaseToken = async () => {
     try {
+        const vapidKey = getValidVapidKey();
+        if (!vapidKey) {
+            console.warn("Firebase messaging disabled: missing or invalid VAPID key.");
+            return null;
+        }
+
+        const messaging = await getMessagingInstance();
+        if (!messaging) {
+            console.warn("Firebase messaging unavailable in this browser/context.");
+            return null;
+        }
+
+        if (Notification.permission === "denied") {
+            console.warn("Notifications are blocked by the user/browser.");
+            return null;
+        }
+
         const currentToken = await getToken(messaging, {
-            vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY || "dummy_vapid_key"
+            vapidKey,
         });
+
         if (currentToken) {
             console.log('Firebase token:', currentToken);
             // Here you would usually save the token to your database (e.g. Supabase profiles)
@@ -33,9 +73,10 @@ export const requestFirebaseToken = async () => {
     }
 };
 
-export const onMessageListener = () =>
-    new Promise((resolve) => {
-        onMessage(messaging, (payload) => {
-            resolve(payload);
-        });
-    });
+export const subscribeToFirebaseMessages = async (
+    callback: (payload: MessagePayload) => void
+) => {
+    const messaging = await getMessagingInstance();
+    if (!messaging) return () => undefined;
+    return onMessage(messaging, callback);
+};

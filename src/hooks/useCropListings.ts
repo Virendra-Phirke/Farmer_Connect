@@ -11,10 +11,19 @@ import {
 export function useCropListings(filters?: {
   status?: string;
   farmer_id?: string;
-}) {
+}, options?: { enabled?: boolean }) {
+  // Only enable query if:
+  // 1. No filters specified (public browse mode), OR
+  // 2. farmer_id filter is provided with a non-empty value (user's own listings)
+  const isEnabled =
+    !filters ||
+    (filters && !!filters.farmer_id) ||
+    (filters && !!filters.status && !filters.farmer_id);
+
   return useQuery({
     queryKey: ["crop-listings", filters],
     queryFn: () => getCropListings(filters),
+    enabled: options?.enabled !== undefined ? options.enabled : isEnabled,
   });
 }
 
@@ -32,7 +41,7 @@ export function useCreateCropListing() {
   return useMutation({
     mutationFn: (listing: CropListingInsert) => createCropListing(listing),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["crop-listings"] });
+      queryClient.invalidateQueries({ queryKey: ["crop-listings"], refetchType: "all" });
     },
   });
 }

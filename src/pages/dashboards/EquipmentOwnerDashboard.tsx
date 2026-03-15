@@ -1,4 +1,4 @@
-import { Tractor, Store, CalendarCheck, Users, MapPin } from "lucide-react";
+import { Tractor, Store, Users, MapPin } from "lucide-react";
 import { useUser } from "@clerk/clerk-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -19,7 +19,8 @@ const EquipmentOwnerDashboard = () => {
     }, [user?.id]);
 
     const { data: equipments } = useEquipmentListings(
-        profileId ? { owner_id: profileId } : undefined
+        profileId ? { owner_id: profileId } : undefined,
+        { enabled: !!profileId }
     );
     const activeEquipmentsCount = equipments?.filter(e => e.is_available)?.length || 0;
 
@@ -29,7 +30,6 @@ const EquipmentOwnerDashboard = () => {
     const cards = [
         { icon: Tractor, title: "My Equipment", description: "Manage your listed agricultural equipment", stat: activeEquipmentsCount ? `${activeEquipmentsCount} listed` : undefined, path: "/equipment/my-equipment" },
         { icon: Store, title: "Rental Requests", description: "View and respond to rental requests", stat: pendingBookings > 0 ? `${pendingBookings} new` : undefined, path: "/equipment/rental-requests" },
-        { icon: CalendarCheck, title: "Booking Calendar", description: "Track active bookings and schedule", path: "/equipment/bookings" },
         { icon: Users, title: "My Renters", description: "Track active rentals and history", path: "/equipment/bookings" },
         { icon: MapPin, title: "My Profile", description: "Update your business and equipment details", path: "/profile" },
     ];

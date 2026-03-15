@@ -11,6 +11,8 @@ export type SupplyContract = {
     end_date: string;
     price_per_kg: number;
     status: "pending" | "active" | "paused" | "completed" | "cancelled";
+    payment_status: "unpaid" | "paid";
+    billing_id: string | null;
     created_at: string;
     updated_at: string;
 };
@@ -106,6 +108,19 @@ export async function getSupplyContractById(id: string) {
 }
 
 export async function createSupplyContract(contract: SupplyContractInsert) {
+    // SELF HEALING: Ensure farmer_profiles row exists so FK constraint passes
+    try {
+        await supabase.from("farmer_profiles" as any).upsert({ profile_id: contract.farmer_id }, { onConflict: "profile_id" });
+    } catch (e) {
+        console.warn("Could not self-heal farmer_profiles:", e);
+    }
+    // SELF HEALING: Ensure buyer_profiles row exists
+    try {
+        await supabase.from("buyer_profiles" as any).upsert({ profile_id: contract.buyer_id }, { onConflict: "profile_id" });
+    } catch (e) {
+        console.warn("Could not self-heal buyer_profiles:", e);
+    }
+
     const { data, error } = await supabase
         .from("supply_contracts")
         .insert(contract)
@@ -124,7 +139,8 @@ export async function updateSupplyContract(
     id: string,
     updates: Partial<SupplyContractInsert>
 ) {
-    const { data, error } = await supabase
+    // Try with all fields first
+    let { data, error } = await supabase
         .from("supply_contracts")
         .update({
             ...updates,
@@ -133,6 +149,31 @@ export async function updateSupplyContract(
         .eq("id", id)
         .select()
         .single();
+
+    // If the error is about payment_status column not existing, retry without it
+    if (error && error.code === "PGRST204" && error.message?.includes("payment_status")) {
+        console.warn("payment_status column not found in schema, updating without it:", error);
+        
+        // Remove payment_status and billing_id from updates
+        const { payment_status, billing_id, ...safeUpdates } = updates;
+        
+        const result = await supabase
+            .from("supply_contracts")
+            .update({
+                ...safeUpdates,
+                updated_at: new Date().toISOString(),
+            })
+            .eq("id", id)
+            .select()
+            .single();
+        
+        if (result.error) {
+            console.error("Error updating supply contract (fallback):", result.error);
+            throw result.error;
+        }
+        
+        return result.data;
+    }
 
     if (error) {
         console.error("Error updating supply contract:", error);

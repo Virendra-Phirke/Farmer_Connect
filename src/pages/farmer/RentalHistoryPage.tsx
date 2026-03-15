@@ -2,18 +2,43 @@ import { useEffect, useState } from "react";
 import { useUser } from "@clerk/clerk-react";
 import { getProfileId } from "@/lib/supabase-auth";
 import { useEquipmentBookings } from "@/hooks/useEquipmentBookings";
+import { getEquipmentPaymentStatus } from "@/lib/api/equipment-bookings";
 import DashboardLayout from "@/components/DashboardLayout";
-import { Loader2, CalendarCheck, Check, X, Clock } from "lucide-react";
+import { Loader2, CalendarCheck, Check, X, Clock, FileText } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { BillReceiptDialog } from "@/components/BillReceiptDialog";
+import { useToast } from "@/hooks/use-toast";
 
 const RentalHistoryPage = () => {
     const { user } = useUser();
     const [profileId, setProfileId] = useState<string | null>(null);
+    const [isBillOpen, setIsBillOpen] = useState(false);
+    const [selectedBooking, setSelectedBooking] = useState<any>(null);
+    const { toast } = useToast();
+
+    const showBill = (booking: any) => {
+        setSelectedBooking({
+            billingId: booking.billing_id || `BILL-${booking.id}`,
+            transactionType: "Equipment Rental",
+            title: `${booking.equipment?.name || "Equipment"} (${booking.start_date} to ${booking.end_date})`,
+            amount: booking.total_price,
+            date: new Date(booking.created_at).toLocaleDateString(),
+            buyerName: user?.fullName || "You",
+            sellerName: booking.equipment?.owner?.full_name || "Unknown Owner",
+            paymentStatus: getEquipmentPaymentStatus(booking),
+            originalRecord: booking
+        });
+        setIsBillOpen(true);
+    };
 
     useEffect(() => {
         if (user?.id) getProfileId(user.id).then(setProfileId);
     }, [user?.id]);
 
-    const { data: bookings, isLoading } = useEquipmentBookings(profileId ? { renter_id: profileId } : undefined);
+    const { data: bookings, isLoading } = useEquipmentBookings(
+        profileId ? { renter_id: profileId } : undefined,
+        { enabled: !!profileId }
+    );
 
     const getStatusBadge = (status: string) => {
         switch (status) {
@@ -46,12 +71,23 @@ const RentalHistoryPage = () => {
                                 </div>
                                 <div className="flex items-center gap-2">
                                     {getStatusBadge(booking.status)}
+                                    {booking.status === "completed" && (
+                                        <Button size="sm" variant="outline" onClick={() => showBill(booking)} className="flex items-center gap-1">
+                                            <FileText className="h-4 w-4" /> View Bill
+                                        </Button>
+                                    )}
                                 </div>
                             </div>
                         ))}
                     </div>
                 )}
             </div>
+            <BillReceiptDialog 
+                isOpen={isBillOpen} 
+                onClose={() => setIsBillOpen(false)}
+                billDetails={selectedBooking}
+                canMarkPaid={false}
+            />
         </DashboardLayout>
     );
 };

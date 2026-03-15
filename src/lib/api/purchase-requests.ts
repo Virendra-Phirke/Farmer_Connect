@@ -8,6 +8,8 @@ export type PurchaseRequest = {
     offered_price: number;
     message: string | null;
     status: "pending" | "accepted" | "rejected" | "completed";
+    payment_status: "unpaid" | "paid";
+    billing_id: string | null;
     request_type: "single" | "bulk" | "contract";
     created_at: string;
     updated_at: string;
@@ -137,15 +139,44 @@ export async function updatePurchaseRequest(
     id: string,
     updates: Partial<PurchaseRequestInsert>
 ) {
-    const { data, error } = await supabase
+    // Filter out payment_status and billing_id if they might not exist in the schema yet
+    const filteredUpdates = { ...updates };
+    
+    // Try with all fields first
+    let { data, error } = await supabase
         .from("purchase_requests")
         .update({
-            ...updates,
+            ...filteredUpdates,
             updated_at: new Date().toISOString(),
         })
         .eq("id", id)
         .select()
         .single();
+
+    // If the error is about payment_status column not existing, retry without it
+    if (error && error.code === "PGRST204" && error.message?.includes("payment_status")) {
+        console.warn("payment_status column not found in schema, updating without it:", error);
+        
+        // Remove payment_status and billing_id from updates
+        const { payment_status, billing_id, ...safeUpdates } = filteredUpdates;
+        
+        const result = await supabase
+            .from("purchase_requests")
+            .update({
+                ...safeUpdates,
+                updated_at: new Date().toISOString(),
+            })
+            .eq("id", id)
+            .select()
+            .single();
+        
+        if (result.error) {
+            console.error("Error updating purchase request (fallback):", result.error);
+            throw result.error;
+        }
+        
+        return result.data;
+    }
 
     if (error) {
         console.error("Error updating purchase request:", error);

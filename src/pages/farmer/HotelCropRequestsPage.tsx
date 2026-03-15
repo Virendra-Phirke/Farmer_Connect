@@ -1,5 +1,7 @@
 import DashboardLayout from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
+    import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useOpenCropRequirements } from "@/hooks/useCropRequirements";
 import { useCreateSupplyContract } from "@/hooks/useSupplyContracts";
 import { useUser } from "@clerk/clerk-react";
@@ -11,6 +13,8 @@ import { toast } from "sonner";
 export default function HotelCropRequestsPage() {
     const { user } = useUser();
     const [profileId, setProfileId] = useState<string | null>(null);
+    const [selectedReq, setSelectedReq] = useState<any>(null);
+    const [proposedPrice, setProposedPrice] = useState("");
 
     useEffect(() => {
         if (user?.id) {
@@ -21,22 +25,38 @@ export default function HotelCropRequestsPage() {
     const { data: requirements, isLoading } = useOpenCropRequirements();
     const createContract = useCreateSupplyContract();
 
-    const handleFulfill = (reqId: string, hotelId: string, cropName: string, quantity: number) => {
-        if (!profileId) return;
+    const handleFulfill = () => {
+        if (!profileId || !selectedReq || !proposedPrice) {
+            toast.error("Please enter a price for your proposal");
+            return;
+        }
+
+        const price = parseFloat(proposedPrice);
+        if (isNaN(price) || price <= 0) {
+            toast.error("Please enter a valid price");
+            return;
+        }
 
         createContract.mutate({
             farmer_id: profileId,
-            buyer_id: hotelId,
-            crop_name: cropName,
-            quantity_kg_per_delivery: quantity,
+            buyer_id: selectedReq.hotel_id,
+            crop_name: selectedReq.crop_name,
+            quantity_kg_per_delivery: selectedReq.quantity_kg,
             delivery_frequency: "weekly",
             start_date: new Date().toISOString().split('T')[0],
             end_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-            price_per_kg: 0, // Negotiation starts here or fixed later
+            price_per_kg: price,
+            payment_status: "unpaid",
+            billing_id: null,
             status: "pending"
         }, {
             onSuccess: () => {
-                toast.success(`Sent supply proposal to hotel for ${quantity}kg of ${cropName}!`);
+                toast.success(`Sent supply proposal to ${selectedReq.hotel?.full_name || "hotel"} for ${selectedReq.quantity_kg}kg of ${selectedReq.crop_name} @ ₹${price}/kg!`);
+                setSelectedReq(null);
+                setProposedPrice("");
+            },
+            onError: () => {
+                toast.error("Failed to send supply proposal. Please try again.");
             }
         });
     };
@@ -79,7 +99,7 @@ export default function HotelCropRequestsPage() {
 
                             <Button
                                 className="w-full"
-                                onClick={() => handleFulfill(req.id, req.hotel_id, req.crop_name, req.quantity_kg)}
+                                onClick={() => setSelectedReq(req)}
                                 disabled={createContract.isPending}
                             >
                                 {createContract.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ArrowRight className="mr-2 h-4 w-4" />}
@@ -89,6 +109,56 @@ export default function HotelCropRequestsPage() {
                     ))}
                 </div>
             )}
+
+            {/* Price Proposal Dialog */}
+            <Dialog open={!!selectedReq} onOpenChange={(open) => !open && (setSelectedReq(null), setProposedPrice(""))}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Propose Supply Contract</DialogTitle>
+                        <DialogDescription>
+                            Set your price for {selectedReq?.crop_name} to be delivered to {selectedReq?.hotel?.full_name}
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                        <div>
+                            <label className="text-sm font-medium">Crop & Quantity</label>
+                            <div className="mt-1 p-3 bg-muted rounded-lg">
+                                <p className="font-semibold">{selectedReq?.crop_name}</p>
+                                <p className="text-sm text-muted-foreground">{selectedReq?.quantity_kg} kg / week</p>
+                            </div>
+                        </div>
+                        <div>
+                            <label className="text-sm font-medium">Your Price per kg (₹) *</label>
+                            <Input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                placeholder="e.g. 45.50"
+                                value={proposedPrice}
+                                onChange={(e) => setProposedPrice(e.target.value)}
+                                autoFocus
+                            />
+                        </div>
+                        {proposedPrice && (
+                            <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+                                <p className="text-sm text-muted-foreground">Total per delivery</p>
+                                <p className="text-lg font-semibold text-blue-600">
+                                    ₹{(parseFloat(proposedPrice) * (selectedReq?.quantity_kg || 0)).toFixed(2)}
+                                </p>
+                            </div>
+                        )}
+                    </div>
+                    <div className="flex gap-2 justify-end pt-4">
+                        <Button variant="outline" onClick={() => (setSelectedReq(null), setProposedPrice(""))}>
+                            Cancel
+                        </Button>
+                        <Button onClick={handleFulfill} disabled={createContract.isPending || !proposedPrice}>
+                            {createContract.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            Send Proposal
+                        </Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
         </DashboardLayout>
     );
 }

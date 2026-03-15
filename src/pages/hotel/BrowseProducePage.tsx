@@ -3,6 +3,7 @@ import { useCropListings } from "@/hooks/useCropListings";
 import { useCreatePurchaseRequest } from "@/hooks/usePurchaseRequests";
 import { useUser } from "@clerk/clerk-react";
 import { getProfileId } from "@/lib/supabase-auth";
+import { safeStorageGetItem, safeStorageSetItem } from "@/lib/storage";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Loader2, Store, Heart } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -22,7 +23,6 @@ const BrowseProducePage = () => {
 
     const [selectedCrop, setSelectedCrop] = useState<any | null>(null);
     const [requestQuantity, setRequestQuantity] = useState("");
-    const [offeredPrice, setOfferedPrice] = useState("");
     const [message, setMessage] = useState("");
 
     // User profile id retrieval
@@ -31,8 +31,8 @@ const BrowseProducePage = () => {
 
     useEffect(() => {
         if (user?.id) getProfileId(user.id).then(setProfileId);
-        // Load favorites from local storage
-        const savedFavorites = localStorage.getItem("favoriteFarmers");
+        // Load favorites from safe storage (compatible with Brave private mode)
+        const savedFavorites = safeStorageGetItem("favoriteFarmers");
         if (savedFavorites) {
             try {
                 setFavoriteFarmers(JSON.parse(savedFavorites));
@@ -48,8 +48,8 @@ const BrowseProducePage = () => {
                 ? prev.filter(id => id !== farmerId)
                 : [...prev, farmerId];
 
-            // Persist
-            localStorage.setItem("favoriteFarmers", JSON.stringify(newFavorites));
+            // Persist using safe storage
+            safeStorageSetItem("favoriteFarmers", JSON.stringify(newFavorites));
             return newFavorites;
         });
     };
@@ -64,15 +64,14 @@ const BrowseProducePage = () => {
     });
 
     const handleSendRequest = () => {
-        if (!profileId || !selectedCrop || !requestQuantity || !offeredPrice) {
-            toast.error("Please fill in quantity and offered price.");
+        if (!profileId || !selectedCrop || !requestQuantity) {
+            toast.error("Please fill in quantity.");
             return;
         }
 
         const qty = parseFloat(requestQuantity);
-        const price = parseFloat(offeredPrice);
 
-        if (qty <= 0 || price <= 0) {
+        if (qty <= 0) {
             toast.error("Values must be greater than zero.");
             return;
         }
@@ -85,7 +84,7 @@ const BrowseProducePage = () => {
             crop_listing_id: selectedCrop.id,
             buyer_id: profileId,
             quantity_kg: qty,
-            offered_price: price,
+            offered_price: selectedCrop.price_per_kg,
             request_type: "single",
             status: "pending",
             message: message || undefined
@@ -94,7 +93,6 @@ const BrowseProducePage = () => {
                 toast.success("Purchase request sent to farmer!");
                 setSelectedCrop(null);
                 setRequestQuantity("");
-                setOfferedPrice("");
                 setMessage("");
             },
             onError: () => toast.error("Failed to send request")
@@ -194,25 +192,21 @@ const BrowseProducePage = () => {
                                 <Input id="quantity" type="number" min="1" max={selectedCrop?.quantity_kg} className="col-span-3" value={requestQuantity} onChange={e => setRequestQuantity(e.target.value)} />
                             </div>
                             <div className="grid grid-cols-4 items-center gap-4">
-                                <Label htmlFor="price" className="text-right">Your Offer (₹/kg)</Label>
-                                <Input id="price" type="number" min="1" className="col-span-3" value={offeredPrice} onChange={e => setOfferedPrice(e.target.value)} />
-                            </div>
-                            <div className="grid grid-cols-4 items-center gap-4">
                                 <Label htmlFor="message" className="text-right">Message</Label>
                                 <Input id="message" placeholder="Optional details..." className="col-span-3" value={message} onChange={e => setMessage(e.target.value)} />
                             </div>
-                            {requestQuantity && offeredPrice && (
+                            {requestQuantity && (
                                 <div className="text-right text-sm text-muted-foreground mt-2">
-                                    Total Offer: <span className="font-bold text-foreground">₹{(parseFloat(requestQuantity) * parseFloat(offeredPrice)) || 0}</span>
+                                    Total Amount: <span className="font-bold text-foreground">₹{(parseFloat(requestQuantity) * selectedCrop?.price_per_kg) || 0}</span>
                                 </div>
                             )}
                         </div>
 
                         <DialogFooter>
                             <Button variant="outline" onClick={() => setSelectedCrop(null)}>Cancel</Button>
-                            <Button onClick={handleSendRequest} disabled={createRequest.isPending || !requestQuantity || !offeredPrice}>
+                            <Button onClick={handleSendRequest} disabled={createRequest.isPending || !requestQuantity}>
                                 {createRequest.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                Submit Offer
+                                Submit Request
                             </Button>
                         </DialogFooter>
                     </DialogContent>

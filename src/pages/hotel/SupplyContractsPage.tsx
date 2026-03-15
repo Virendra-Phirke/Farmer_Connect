@@ -3,24 +3,48 @@ import { useUser } from "@clerk/clerk-react";
 import { getProfileId } from "@/lib/supabase-auth";
 import { useSupplyContracts, useUpdateSupplyContract } from "@/hooks/useSupplyContracts";
 import DashboardLayout from "@/components/DashboardLayout";
-import { Loader2, FileText, Check, X, Clock } from "lucide-react";
+import { Loader2, FileText, Check, X, Clock, Receipt } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { BillReceiptDialog } from "@/components/BillReceiptDialog";
 
 const SupplyContractsPage = () => {
     const { user } = useUser();
     const [profileId, setProfileId] = useState<string | null>(null);
+    const [isBillOpen, setIsBillOpen] = useState(false);
+    const [selectedContract, setSelectedContract] = useState<any>(null);
 
     useEffect(() => {
         if (user?.id) getProfileId(user.id).then(setProfileId);
     }, [user?.id]);
 
-    const { data: contracts, isLoading } = useSupplyContracts(profileId ? { buyer_id: profileId } : undefined);
+    const { data: contracts, isLoading } = useSupplyContracts(
+        profileId ? { buyer_id: profileId } : undefined,
+        { enabled: !!profileId }
+    );
     const updateMutation = useUpdateSupplyContract();
 
     const pendingContracts = contracts?.filter((c: any) => c.status === "pending") || [];
     const historyContracts = contracts?.filter((c: any) => c.status !== "pending") || [];
+
+    const showBill = (contract: any) => {
+        const quantityPerDelivery = contract.quantity_kg_per_delivery ?? contract.quantity_per_delivery ?? 0;
+        const amount = contract.price_per_kg * quantityPerDelivery;
+        setSelectedContract({
+            billingId: `CONT-${contract.id}`,
+            transactionId: contract.id,
+            transactionType: "Supply Contract Delivery",
+            title: `${quantityPerDelivery} kg of ${contract.crop_name} (${contract.delivery_frequency})`,
+            amount: amount,
+            date: new Date(contract.start_date || contract.created_at).toLocaleDateString(),
+            buyerName: user?.fullName || "You",
+            sellerName: contract.farmer?.full_name || "Farmer",
+            paymentStatus: contract.payment_status || "unpaid",
+            originalRecord: contract
+        });
+        setIsBillOpen(true);
+    };
 
     const handleAccept = (id: string) => {
         updateMutation.mutate({ id, updates: { status: "active" } }, {
@@ -96,8 +120,15 @@ const SupplyContractsPage = () => {
                                                     <p><span className="text-muted-foreground">Duration:</span> {new Date(contract.start_date).toLocaleDateString()} - {new Date(contract.end_date).toLocaleDateString()}</p>
                                                 </div>
                                             </div>
-                                            <div className="flex items-center gap-2">
-                                                {getStatusBadge(contract.status)}
+                                            <div className="flex flex-col items-end gap-2">
+                                                <div className="flex items-center gap-2">
+                                                    {getStatusBadge(contract.status)}
+                                                </div>
+                                                {contract.status === "active" && (
+                                                    <Button size="sm" variant="outline" onClick={() => showBill(contract)} className="flex items-center gap-1 mt-2">
+                                                        <Receipt className="h-4 w-4" /> View Delivery Bill
+                                                    </Button>
+                                                )}
                                             </div>
                                         </div>
                                     ))}
@@ -107,6 +138,13 @@ const SupplyContractsPage = () => {
                     </Tabs>
                 )}
             </div>
+            
+            <BillReceiptDialog 
+                isOpen={isBillOpen} 
+                onClose={() => setIsBillOpen(false)}
+                billDetails={selectedContract}
+                canMarkPaid={false}
+            />
         </DashboardLayout>
     );
 };

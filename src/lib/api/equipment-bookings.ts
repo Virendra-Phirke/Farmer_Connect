@@ -7,13 +7,32 @@ export type EquipmentBooking = {
     start_date: string;
     end_date: string;
     status: "pending" | "confirmed" | "completed" | "cancelled";
+    payment_status?: "unpaid" | "paid";
+    billing_id?: string | null;
     total_price: number;
     notes: string | null;
+    quantity: number;
     created_at: string;
     updated_at: string;
 };
 
 export type EquipmentBookingInsert = Omit<EquipmentBooking, "id" | "created_at" | "updated_at">;
+
+const PAYMENT_CONFIRMED_MARKER = "[payment_confirmed_by_seller]";
+
+export function getEquipmentPaymentStatus(booking: any): "paid" | "unpaid" {
+    const explicitStatus = String(booking?.payment_status || "").toLowerCase();
+    if (explicitStatus === "paid") return "paid";
+
+    const notes = String(booking?.notes || "").toLowerCase();
+    if (notes.includes(PAYMENT_CONFIRMED_MARKER)) return "paid";
+
+    return "unpaid";
+}
+
+function isMissingPaymentStatusColumnError(error: any): boolean {
+    return error?.code === "PGRST204" && String(error?.message || "").includes("payment_status");
+}
 
 export async function getEquipmentBookings(filters?: {
     equipment_id?: string;
@@ -118,6 +137,32 @@ export async function createEquipmentBooking(booking: EquipmentBookingInsert) {
         .select()
         .single();
 
+    // If error is about missing quantity column, retry without it
+    if (error && error?.code === "PGRST204" && String(error?.message || "").includes("quantity")) {
+        console.warn("Quantity column not found, retrying without it", error);
+        const bookingWithoutQty = { ...booking };
+        delete (bookingWithoutQty as any).quantity;
+        
+        const { data: data2, error: error2 } = await supabase
+            .from("equipment_bookings")
+            .insert(bookingWithoutQty)
+            .select()
+            .single();
+        
+        if (error2) {
+            console.error("Error creating equipment booking (retry):", error2);
+            throw error2;
+        }
+
+        // Mark equipment as unavailable
+        await supabase
+            .from("equipment_listings")
+            .update({ is_available: false, updated_at: new Date().toISOString() })
+            .eq("id", booking.equipment_id);
+
+        return data2;
+    }
+
     if (error) {
         console.error("Error creating equipment booking:", error);
         throw error;
@@ -136,22 +181,49 @@ export async function updateEquipmentBooking(
     id: string,
     updates: Partial<EquipmentBookingInsert>
 ) {
+    const payload = {
+        ...updates,
+        updated_at: new Date().toISOString(),
+    };
+
     const { data, error } = await supabase
         .from("equipment_bookings")
-        .update({
-            ...updates,
-            updated_at: new Date().toISOString(),
-        })
+        .update(payload)
         .eq("id", id)
         .select()
         .single();
 
-    if (error) {
-        console.error("Error updating equipment booking:", error);
-        throw error;
+    if (!error) return data;
+
+    // Compatibility fallback for older schemas missing equipment_bookings.payment_status
+    if ("payment_status" in payload && payload.payment_status === "paid" && isMissingPaymentStatusColumnError(error)) {
+        const existing = await getEquipmentBookingById(id);
+        const existingNotes = String(existing?.notes || "");
+        const nextNotes = existingNotes.includes(PAYMENT_CONFIRMED_MARKER)
+            ? existingNotes
+            : `${existingNotes}${existingNotes ? "\n" : ""}${PAYMENT_CONFIRMED_MARKER} Payment confirmed by seller on ${new Date().toISOString()}`;
+
+        const { data: fallbackData, error: fallbackError } = await supabase
+            .from("equipment_bookings")
+            .update({
+                status: "completed",
+                notes: nextNotes,
+                updated_at: new Date().toISOString(),
+            })
+            .eq("id", id)
+            .select()
+            .single();
+
+        if (fallbackError) {
+            console.error("Error updating equipment booking (fallback path):", fallbackError);
+            throw fallbackError;
+        }
+
+        return fallbackData;
     }
 
-    return data;
+    console.error("Error updating equipment booking:", error);
+    throw error;
 }
 
 export async function cancelEquipmentBooking(id: string) {

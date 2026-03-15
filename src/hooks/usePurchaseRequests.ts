@@ -17,10 +17,11 @@ export function usePurchaseRequests(filters?: {
     crop_listing_id?: string;
     status?: string;
     request_type?: string;
-}) {
+}, options?: { enabled?: boolean }) {
     return useQuery({
         queryKey: ["purchase-requests", filters],
         queryFn: () => getPurchaseRequests(filters),
+        enabled: options?.enabled !== undefined ? options.enabled : true,
     });
 }
 

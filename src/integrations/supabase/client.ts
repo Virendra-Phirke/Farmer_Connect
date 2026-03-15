@@ -5,12 +5,47 @@ import type { Database } from './types';
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "https://malfnaqoywdxuqyergjp.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1hbGZuYXFveXdkeHVxeWVyZ2pwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIyMDExMjAsImV4cCI6MjA4Nzc3NzEyMH0.TfOlpYLTClWsp5pBK79JUVwuWq8EmVLTpy3AtJVEzCA";
 
+// Custom storage adapter for Brave and private browsing compatibility
+const createBrowserCompatibleStorage = () => {
+  return {
+    getItem: (key: string) => {
+      try {
+        return localStorage.getItem(key);
+      } catch {
+        // Fall back to in-memory storage if localStorage fails
+        return typeof window !== 'undefined' ? (window as any).__supabaseAuth?.[key] || null : null;
+      }
+    },
+    setItem: (key: string, value: string) => {
+      try {
+        localStorage.setItem(key, value);
+      } catch {
+        // Fall back to in-memory storage if localStorage fails
+        if (typeof window !== 'undefined') {
+          (window as any).__supabaseAuth = (window as any).__supabaseAuth || {};
+          (window as any).__supabaseAuth[key] = value;
+        }
+      }
+    },
+    removeItem: (key: string) => {
+      try {
+        localStorage.removeItem(key);
+      } catch {
+        // Fall back to in-memory storage if localStorage fails
+        if (typeof window !== 'undefined' && (window as any).__supabaseAuth) {
+          delete (window as any).__supabaseAuth[key];
+        }
+      }
+    },
+  };
+};
+
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {
-    storage: localStorage,
+    storage: createBrowserCompatibleStorage(),
     persistSession: true,
     autoRefreshToken: true,
   }

@@ -15,9 +15,12 @@ export function useEquipmentBookings(filters?: {
     renter_id?: string;
     status?: string;
 }) {
+    const idFilter = filters?.renter_id ?? filters?.equipment_id;
+    const hasIdFilter = "renter_id" in (filters ?? {}) || "equipment_id" in (filters ?? {});
     return useQuery({
         queryKey: ["equipment-bookings", filters],
         queryFn: () => getEquipmentBookings(filters),
+        enabled: !hasIdFilter || !!idFilter,
     });
 }
 

@@ -19,7 +19,8 @@ const FarmerDashboard = () => {
     }, [user?.id]);
 
     const { data: listings } = useCropListings(
-        profileId ? { farmer_id: profileId } : undefined
+        profileId ? { farmer_id: profileId } : undefined,
+        { enabled: !!profileId }
     );
     const activeListingsCount = listings?.filter(l => l.status === "available")?.length || 0;
     const { data: activeContractsCount } = useFarmerActiveContractsCount(profileId || "");

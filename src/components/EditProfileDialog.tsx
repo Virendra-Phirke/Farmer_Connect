@@ -5,9 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { toast } from "sonner";
 import { getUserProfile, updateUserProfile, getUserRole, UserProfile, UserRole } from "@/lib/supabase-auth";
-import { Loader2 } from "lucide-react";
+import { useIndianLocations } from "@/hooks/useIndianLocations";
+import { Loader2, AlertCircle } from "lucide-react";
 
 interface EditProfileDialogProps {
     open: boolean;
@@ -27,14 +29,17 @@ export function EditProfileDialog({ open, onOpenChange }: EditProfileDialogProps
     const [locationName, setLocationName] = useState("");
 
     // New structured location/land fields 
-    const [state, setState] = useState("Maharashtra");
+    const [state, setState] = useState("");
     const [district, setDistrict] = useState("");
-    const [taluka, setTaluka] = useState("");
+    const [subDistrict, setSubDistrict] = useState("");
     const [villageCity, setVillageCity] = useState("");
     const [surveyNumber, setSurveyNumber] = useState("");
     const [gatNumber, setGatNumber] = useState("");
 
     const [role, setRole] = useState<UserRole | null>(null);
+
+    // Use Indian Locations Hook
+    const { states, districts, subDistricts, villages, isLoading: locationsLoading, error: locationError } = useIndianLocations(state, district, subDistrict);
 
     useEffect(() => {
         async function loadProfile() {
@@ -53,9 +58,9 @@ export function EditProfileDialog({ open, onOpenChange }: EditProfileDialogProps
                 setSoilType(data.soil_type || "");
                 setLocationName(data.location || "");
 
-                setState(data.state || "Maharashtra");
+                setState(data.state || "");
                 setDistrict(data.district || "");
-                setTaluka(data.taluka || "");
+                setSubDistrict(data.taluka || "");
                 setVillageCity(data.village_city || "");
                 setSurveyNumber(data.survey_number || "");
                 setGatNumber(data.gat_number || "");
@@ -76,7 +81,7 @@ export function EditProfileDialog({ open, onOpenChange }: EditProfileDialogProps
                 location: role !== "farmer" ? (locationName || null) : null,
                 state: role === "farmer" ? state : null,
                 district: role === "farmer" ? (district || null) : null,
-                taluka: role === "farmer" ? (taluka || null) : null,
+                taluka: role === "farmer" ? (subDistrict || null) : null,
                 village_city: role === "farmer" ? (villageCity || null) : null,
                 survey_number: role === "farmer" ? (surveyNumber || null) : null,
                 gat_number: role === "farmer" ? (gatNumber || null) : null,
@@ -142,26 +147,108 @@ export function EditProfileDialog({ open, onOpenChange }: EditProfileDialogProps
 
                             {role === "farmer" && (
                                 <>
+                                    {locationError && (
+                                        <Alert variant="destructive" className="mb-4">
+                                            <AlertCircle className="h-4 w-4" />
+                                            <AlertDescription>{locationError}</AlertDescription>
+                                        </Alert>
+                                    )}
+                                    
                                     <div className="grid grid-cols-2 gap-4">
+                                        {/* State Dropdown */}
                                         <div className="space-y-2">
                                             <Label htmlFor="state">State</Label>
-                                            <Input id="state" value={state} onChange={(e) => setState(e.target.value)} disabled placeholder="Maharashtra" />
+                                            <Select
+                                                value={state}
+                                                onValueChange={(v) => { setState(v); setDistrict(""); setSubDistrict(""); setVillageCity(""); }}
+                                                disabled={locationsLoading}
+                                            >
+                                                <SelectTrigger id="state">
+                                                    <SelectValue placeholder={locationsLoading ? "Loading..." : "Select state"} />
+                                                </SelectTrigger>
+                                                <SelectContent className="max-h-60">
+                                                    {states.map(s => (
+                                                        <SelectItem key={s} value={s}>{s}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
                                         </div>
+
+                                        {/* District Dropdown */}
                                         <div className="space-y-2">
                                             <Label htmlFor="district">District</Label>
-                                            <Input id="district" value={district} onChange={(e) => setDistrict(e.target.value)} placeholder="e.g. Pune" />
+                                            <Select
+                                                value={district}
+                                                onValueChange={(v) => { setDistrict(v); setSubDistrict(""); setVillageCity(""); }}
+                                                disabled={!state || districts.length === 0 || locationsLoading}
+                                            >
+                                                <SelectTrigger id="district">
+                                                    <SelectValue placeholder={
+                                                        locationsLoading ? "Loading..." :
+                                                        !state ? "Select state first" :
+                                                        districts.length === 0 ? "No districts" :
+                                                        "Select district"
+                                                    } />
+                                                </SelectTrigger>
+                                                <SelectContent className="max-h-60">
+                                                    {districts.map(d => (
+                                                        <SelectItem key={d} value={d}>{d}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
                                         </div>
                                     </div>
+
                                     <div className="grid grid-cols-2 gap-4">
+                                        {/* Sub-District Dropdown */}
                                         <div className="space-y-2">
-                                            <Label htmlFor="taluka">Taluka</Label>
-                                            <Input id="taluka" value={taluka} onChange={(e) => setTaluka(e.target.value)} placeholder="e.g. Haveli" />
+                                            <Label htmlFor="subDistrict">Sub-District</Label>
+                                            <Select
+                                                value={subDistrict}
+                                                onValueChange={(v) => { setSubDistrict(v); setVillageCity(""); }}
+                                                disabled={!district || subDistricts.length === 0 || locationsLoading}
+                                            >
+                                                <SelectTrigger id="subDistrict">
+                                                    <SelectValue placeholder={
+                                                        locationsLoading ? "Loading..." :
+                                                        !district ? "Select district first" :
+                                                        subDistricts.length === 0 ? "No sub-districts" :
+                                                        "Select sub-district"
+                                                    } />
+                                                </SelectTrigger>
+                                                <SelectContent className="max-h-60">
+                                                    {subDistricts.map(sd => (
+                                                        <SelectItem key={sd} value={sd}>{sd}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
                                         </div>
+
+                                        {/* Village / City Dropdown */}
                                         <div className="space-y-2">
                                             <Label htmlFor="villageCity">Village / City</Label>
-                                            <Input id="villageCity" value={villageCity} onChange={(e) => setVillageCity(e.target.value)} placeholder="e.g. Loni Kalbhor" />
+                                            <Select
+                                                value={villageCity}
+                                                onValueChange={setVillageCity}
+                                                disabled={!subDistrict || villages.length === 0 || locationsLoading}
+                                            >
+                                                <SelectTrigger id="villageCity">
+                                                    <SelectValue placeholder={
+                                                        locationsLoading ? "Loading..." :
+                                                        !subDistrict ? "Select sub-district first" :
+                                                        villages.length === 0 ? "No villages" :
+                                                        "Select village"
+                                                    } />
+                                                </SelectTrigger>
+                                                <SelectContent className="max-h-60">
+                                                    {villages.map(v => (
+                                                        <SelectItem key={v} value={v}>{v}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
                                         </div>
                                     </div>
+
                                     <div className="grid grid-cols-2 gap-4">
                                         <div className="space-y-2">
                                             <Label htmlFor="surveyNumber">Survey Number</Label>

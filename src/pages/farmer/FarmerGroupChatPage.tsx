@@ -4,6 +4,7 @@ import { useUser } from "@clerk/clerk-react";
 import { getProfileId } from "@/lib/supabase-auth";
 import { encryptMessage, decryptMessage } from "@/lib/crypto";
 import { useFarmerGroup, useFarmerGroupRequests, useUpdateFarmerGroupRequest } from "@/hooks/useFarmerGroups";
+import { removeGroupMember } from "@/lib/api/farmer-groups";
 import { useGroupMessages, useSendGroupMessage, useDeleteGroupMessage } from "@/hooks/useFarmerGroupMessages";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
@@ -38,7 +39,7 @@ const FarmerGroupChatPage = () => {
     const updateRequestMutation = useUpdateFarmerGroupRequest();
 
     // Hooks for admin actions
-    const removeMemberMutation = { mutate: (args: any, config: any) => import("@/lib/api/farmer-groups").then(m => m.removeGroupMember(args.groupId, args.profileId).then(config.onSuccess).catch(config.onError)) };
+    const removeMemberMutation = { mutate: (args: any, config: any) => removeGroupMember(args.groupId, args.profileId).then(config.onSuccess).catch(config.onError) };
 
     const isCreator = group?.created_by === profileId;
 
@@ -64,8 +65,37 @@ const FarmerGroupChatPage = () => {
     };
 
     const handleCopy = (content: string) => {
-        navigator.clipboard.writeText(content);
-        toast.success("Message copied to clipboard");
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(content)
+                .then(() => toast.success("Message copied to clipboard"))
+                .catch(() => {
+                    // Fallback for browsers without clipboard support (older Brave versions, private mode)
+                    const textArea = document.createElement("textarea");
+                    textArea.value = content;
+                    document.body.appendChild(textArea);
+                    textArea.select();
+                    try {
+                        document.execCommand("copy");
+                        toast.success("Message copied to clipboard");
+                    } catch {
+                        toast.error("Failed to copy message");
+                    }
+                    document.body.removeChild(textArea);
+                });
+        } else {
+            // Fallback for browsers without clipboard API
+            const textArea = document.createElement("textarea");
+            textArea.value = content;
+            document.body.appendChild(textArea);
+            textArea.select();
+            try {
+                document.execCommand("copy");
+                toast.success("Message copied to clipboard");
+            } catch {
+                toast.error("Failed to copy message");
+            }
+            document.body.removeChild(textArea);
+        }
     };
 
     const handleDeleteMessage = (messageId: string) => {

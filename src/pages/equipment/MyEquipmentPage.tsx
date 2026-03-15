@@ -1,32 +1,39 @@
 import { useEffect, useState } from "react";
 import { useUser } from "@clerk/clerk-react";
 import { getProfileId } from "@/lib/supabase-auth";
-import { useEquipmentListings, useCreateEquipmentListing, useDeleteEquipmentListing } from "@/hooks/useEquipmentListings";
+import { useEquipmentListings, useCreateEquipmentListing, useDeleteEquipmentListing, useUpdateEquipmentListing } from "@/hooks/useEquipmentListings";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Loader2, Plus, Trash2, Tractor } from "lucide-react";
+import { Loader2, Plus, Trash2, Tractor, Edit2 } from "lucide-react";
 import { SearchBar } from "@/components/SearchBar";
 
 const MyEquipmentPage = () => {
     const { user } = useUser();
     const [profileId, setProfileId] = useState<string | null>(null);
     const [showCreate, setShowCreate] = useState(false);
+    const [showEdit, setShowEdit] = useState(false);
+    const [editingItem, setEditingItem] = useState<any>(null);
 
     useEffect(() => {
         if (user?.id) getProfileId(user.id).then(setProfileId);
     }, [user?.id]);
 
-    const { data: equipment, isLoading } = useEquipmentListings(profileId ? { owner_id: profileId } : undefined);
+    const { data: equipment, isLoading } = useEquipmentListings(
+        profileId ? { owner_id: profileId } : undefined,
+        { enabled: !!profileId }
+    );
     const createMutation = useCreateEquipmentListing();
+    const updateMutation = useUpdateEquipmentListing();
     const deleteMutation = useDeleteEquipmentListing();
 
     const [name, setName] = useState("");
     const [category, setCategory] = useState("");
     const [pricePerDay, setPricePerDay] = useState("");
+    const [quantity, setQuantity] = useState("");
     const [location, setLocation] = useState("");
     const [description, setDescription] = useState("");
     const [searchQuery, setSearchQuery] = useState("");
@@ -37,15 +44,61 @@ const MyEquipmentPage = () => {
     );
 
     const handleCreate = () => {
-        if (!profileId || !name || !category || !pricePerDay || !location) {
+        if (!profileId || !name || !category || !pricePerDay || !location || !quantity) {
             toast.error("Please fill all required fields");
             return;
         }
         createMutation.mutate(
-            { owner_id: profileId, name, category, price_per_day: parseFloat(pricePerDay), location, description, is_available: true },
+            { owner_id: profileId, name, category, price_per_day: parseFloat(pricePerDay), location, description, quantity: parseInt(quantity), image_url: null },
             {
-                onSuccess: () => { toast.success("Equipment listed!"); setShowCreate(false); setName(""); setCategory(""); setPricePerDay(""); setLocation(""); setDescription(""); },
+                onSuccess: () => { toast.success("Equipment listed!"); setShowCreate(false); setName(""); setCategory(""); setPricePerDay(""); setQuantity(""); setLocation(""); setDescription(""); },
                 onError: () => toast.error("Failed to create listing"),
+            }
+        );
+    };
+
+    const handleEdit = (item: any) => {
+        setEditingItem(item);
+        setName(item.name);
+        setCategory(item.category);
+        setPricePerDay(item.price_per_day.toString());
+        setQuantity(item.quantity?.toString() || "1");
+        setLocation(item.location);
+        setDescription(item.description || "");
+        setShowEdit(true);
+    };
+
+    const handleUpdate = () => {
+        if (!editingItem || !name || !category || !pricePerDay || !location || !quantity) {
+            toast.error("Please fill all required fields");
+            return;
+        }
+        const quantityNum = parseInt(quantity);
+        updateMutation.mutate(
+            { 
+                id: editingItem.id, 
+                updates: { 
+                    name, 
+                    category, 
+                    price_per_day: parseFloat(pricePerDay), 
+                    location, 
+                    description, 
+                    quantity: quantityNum 
+                } 
+            },
+            {
+                onSuccess: () => { 
+                    toast.success("Equipment updated!"); 
+                    setShowEdit(false); 
+                    setEditingItem(null);
+                    setName(""); 
+                    setCategory(""); 
+                    setPricePerDay(""); 
+                    setQuantity(""); 
+                    setLocation(""); 
+                    setDescription(""); 
+                },
+                onError: () => toast.error("Failed to update listing"),
             }
         );
     };
@@ -57,7 +110,7 @@ const MyEquipmentPage = () => {
                     <h2 className="text-xl font-bold">My Equipment</h2>
                     <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
                         <SearchBar placeholder="Search equipment..." onSearch={setSearchQuery} />
-                        <Button onClick={() => setShowCreate(true)} className="whitespace-nowrap"><Plus className="mr-2 h-4 w-4" /> List Equipment</Button>
+                        <Button onClick={() => { setShowCreate(true); setName(""); setCategory(""); setPricePerDay(""); setQuantity(""); setLocation(""); setDescription(""); }} className="whitespace-nowrap"><Plus className="mr-2 h-4 w-4" /> List Equipment</Button>
                     </div>
                 </div>
 
@@ -69,27 +122,35 @@ const MyEquipmentPage = () => {
                     </div>
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {filteredEquipment.map((item: any) => (
-                            <div key={item.id} className="bg-card rounded-xl border border-border p-6 relative">
-                                <div className="flex items-center gap-3 mb-3">
-                                    <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center"><Tractor className="h-5 w-5 text-accent" /></div>
-                                    <div>
-                                        <h3 className="font-semibold">{item.name}</h3>
-                                        <span className="text-xs text-muted-foreground capitalize">{item.category}</span>
+                        {filteredEquipment.map((item: any) => {
+                            const isUnavailable = item.quantity === 0;
+                            return (
+                                <div key={item.id} className="bg-card rounded-xl border border-border p-6 relative">
+                                    <div className="flex items-center gap-3 mb-3">
+                                        <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center"><Tractor className="h-5 w-5 text-accent" /></div>
+                                        <div>
+                                            <h3 className="font-semibold">{item.name}</h3>
+                                            <span className="text-xs text-muted-foreground capitalize">{item.category}</span>
+                                        </div>
+                                    </div>
+                                    <p className="text-sm mb-1">₹{item.price_per_day}/day</p>
+                                    <p className="text-sm text-muted-foreground mb-2">📍 {item.location}</p>
+                                    <div className="flex items-center gap-2 text-sm mb-3">
+                                        <span className={isUnavailable ? "text-red-500 font-semibold" : "text-green-600 font-semibold"}>{isUnavailable ? "Unavailable" : "Available"}</span>
+                                        <span className="text-muted-foreground">• Qty: {item.quantity}</span>
+                                    </div>
+                                    <div className="absolute top-4 right-4 flex gap-2">
+                                        <Button variant="ghost" size="icon" className="text-primary" onClick={() => handleEdit(item)}><Edit2 className="h-4 w-4" /></Button>
+                                        <Button variant="ghost" size="icon" className="text-destructive" onClick={() => deleteMutation.mutate(item.id, { onSuccess: () => toast.success("Deleted"), onError: () => toast.error("Failed") })}><Trash2 className="h-4 w-4" /></Button>
                                     </div>
                                 </div>
-                                <p className="text-sm mb-1">₹{item.price_per_day}/day</p>
-                                <p className="text-sm text-muted-foreground mb-2">📍 {item.location}</p>
-                                <div className="flex items-center gap-2 text-sm">
-                                    <span className={item.is_available ? "text-green-600" : "text-red-500"}>{item.is_available ? "Available" : "Unavailable"}</span>
-                                </div>
-                                <Button variant="ghost" size="icon" className="absolute top-4 right-4 text-destructive" onClick={() => deleteMutation.mutate(item.id, { onSuccess: () => toast.success("Deleted"), onError: () => toast.error("Failed") })}><Trash2 className="h-4 w-4" /></Button>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 )}
             </div>
 
+            {/* Create Dialog */}
             <Dialog open={showCreate} onOpenChange={setShowCreate}>
                 <DialogContent>
                     <DialogHeader><DialogTitle>List New Equipment</DialogTitle></DialogHeader>
@@ -97,12 +158,38 @@ const MyEquipmentPage = () => {
                         <div className="space-y-2"><Label>Equipment Name *</Label><Input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. John Deere Tractor" /></div>
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2"><Label>Category *</Label><Input value={category} onChange={e => setCategory(e.target.value)} placeholder="e.g. Tractor" /></div>
-                            <div className="space-y-2"><Label>Price/Day (₹) *</Label><Input type="number" value={pricePerDay} onChange={e => setPricePerDay(e.target.value)} /></div>
+                            <div className="space-y-2"><Label>Quantity *</Label><Input type="number" min="1" value={quantity} onChange={e => setQuantity(e.target.value)} placeholder="e.g. 5" /></div>
                         </div>
-                        <div className="space-y-2"><Label>Location *</Label><Input value={location} onChange={e => setLocation(e.target.value)} placeholder="City/District" /></div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2"><Label>Price/Day (₹) *</Label><Input type="number" value={pricePerDay} onChange={e => setPricePerDay(e.target.value)} /></div>
+                            <div className="space-y-2"><Label>Location *</Label><Input value={location} onChange={e => setLocation(e.target.value)} placeholder="City/District" /></div>
+                        </div>
                         <div className="space-y-2"><Label>Description</Label><Input value={description} onChange={e => setDescription(e.target.value)} placeholder="Optional" /></div>
                         <Button className="w-full" onClick={handleCreate} disabled={createMutation.isPending}>
                             {createMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} List Equipment
+                        </Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            {/* Edit Dialog */}
+            <Dialog open={showEdit} onOpenChange={setShowEdit}>
+                <DialogContent>
+                    <DialogHeader><DialogTitle>Edit Equipment</DialogTitle></DialogHeader>
+                    <div className="space-y-4 py-4">
+                        <div className="space-y-2"><Label>Equipment Name *</Label><Input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. John Deere Tractor" /></div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2"><Label>Category *</Label><Input value={category} onChange={e => setCategory(e.target.value)} placeholder="e.g. Tractor" /></div>
+                            <div className="space-y-2"><Label>Quantity *</Label><Input type="number" min="0" value={quantity} onChange={e => setQuantity(e.target.value)} placeholder="e.g. 5" /></div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2"><Label>Price/Day (₹) *</Label><Input type="number" value={pricePerDay} onChange={e => setPricePerDay(e.target.value)} /></div>
+                            <div className="space-y-2"><Label>Location *</Label><Input value={location} onChange={e => setLocation(e.target.value)} placeholder="City/District" /></div>
+                        </div>
+                        <div className="space-y-2"><Label>Description</Label><Input value={description} onChange={e => setDescription(e.target.value)} placeholder="Optional" /></div>
+                        {parseInt(quantity) === 0 && <p className="text-sm text-amber-600">⚠️ Equipment will be marked as unavailable</p>}
+                        <Button className="w-full" onClick={handleUpdate} disabled={updateMutation.isPending}>
+                            {updateMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Update Equipment
                         </Button>
                     </div>
                 </DialogContent>

@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
-import { getGroupMessages, sendGroupMessage, subscribeToGroupMessages } from "@/lib/api/farmer-group-messages";
+import { getGroupMessages, sendGroupMessage, subscribeToGroupMessages, deleteGroupMessage } from "@/lib/api/farmer-group-messages";
 import { supabase } from "@/integrations/supabase/client";
 
 export function useGroupMessages(groupId: string) {
@@ -46,7 +46,7 @@ export function useDeleteGroupMessage() {
 
     return useMutation({
         mutationFn: ({ messageId }: { messageId: string; groupId: string }) =>
-            import("@/lib/api/farmer-group-messages").then(m => m.deleteGroupMessage(messageId)),
+            deleteGroupMessage(messageId),
         onSuccess: (_, variables) => {
             queryClient.invalidateQueries({ queryKey: ["group-messages", variables.groupId] });
         },
