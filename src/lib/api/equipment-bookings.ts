@@ -154,11 +154,8 @@ export async function createEquipmentBooking(booking: EquipmentBookingInsert) {
             throw error2;
         }
 
-        // Mark equipment as unavailable
-        await supabase
-            .from("equipment_listings")
-            .update({ is_available: false, updated_at: new Date().toISOString() })
-            .eq("id", booking.equipment_id);
+        // Reduce equipment quantity
+        await reduceEquipmentQuantity(booking.equipment_id, booking.quantity || 1);
 
         return data2;
     }
@@ -168,13 +165,42 @@ export async function createEquipmentBooking(booking: EquipmentBookingInsert) {
         throw error;
     }
 
-    // Mark equipment as unavailable
-    await supabase
-        .from("equipment_listings")
-        .update({ is_available: false, updated_at: new Date().toISOString() })
-        .eq("id", booking.equipment_id);
+    // Reduce equipment quantity
+    await reduceEquipmentQuantity(booking.equipment_id, booking.quantity || 1);
 
     return data;
+}
+
+export async function reduceEquipmentQuantity(equipmentId: string, quantityToReduce: number) {
+    // Get current equipment
+    const { data: equipment, error: fetchError } = await supabase
+        .from("equipment_listings")
+        .select("quantity")
+        .eq("id", equipmentId)
+        .single();
+
+    if (fetchError) {
+        console.error("Error fetching equipment for quantity update:", fetchError);
+        return;
+    }
+
+    const currentQuantity = equipment?.quantity || 0;
+    const newQuantity = Math.max(0, currentQuantity - quantityToReduce);
+    const isAvailable = newQuantity > 0;
+
+    // Update quantity and availability
+    const { error: updateError } = await supabase
+        .from("equipment_listings")
+        .update({ 
+            quantity: newQuantity,
+            is_available: isAvailable,
+            updated_at: new Date().toISOString() 
+        })
+        .eq("id", equipmentId);
+
+    if (updateError) {
+        console.error("Error reducing equipment quantity:", updateError);
+    }
 }
 
 export async function updateEquipmentBooking(

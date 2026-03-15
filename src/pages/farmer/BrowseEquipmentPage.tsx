@@ -22,10 +22,10 @@ const BrowseEquipmentPage = () => {
         }
     }, [user?.id]);
 
-    const { data: equipment, isLoading } = useEquipmentListings({ is_available: true });
+    const { data: equipment, isLoading } = useEquipmentListings();
     const createBooking = useCreateEquipmentBooking();
 
-    // Filter out equipment with 0 quantity
+    // Filter out equipment with 0 quantity - show equipment even if previously rented until unavailable
     const availableEquipment = equipment?.filter((item: any) => item.quantity > 0) || [];
 
     const [selectedEquipment, setSelectedEquipment] = useState<any | null>(null);
@@ -82,22 +82,27 @@ const BrowseEquipmentPage = () => {
                     <div className="bg-card rounded-xl border border-border p-12 text-center text-muted-foreground">No equipment available right now. Check back later!</div>
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {availableEquipment.map((item: any) => (
-                            <div key={item.id} className="bg-card rounded-xl border border-border p-6 hover:shadow-md transition-shadow">
+                        {availableEquipment.map((item: any) => {
+                            const isLowStock = item.quantity <= 2;
+                            return (
+                            <div key={item.id} className={`bg-card rounded-xl border ${isLowStock ? 'border-orange-300' : 'border-border'} p-6 hover:shadow-md transition-shadow`}>
                                 <div className="flex items-center gap-3 mb-4">
                                     <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center"><Tractor className="h-5 w-5 text-accent" /></div>
-                                    <div>
+                                    <div className="flex-1">
                                         <h3 className="font-semibold">{item.name}</h3>
                                         <span className="text-xs text-muted-foreground capitalize">{item.category}</span>
                                     </div>
+                                    {item.quantity === 1 && <span className="bg-red-500/10 text-red-600 px-2 py-1 text-xs font-semibold rounded-full">Only 1 Left</span>}
+                                    {item.quantity === 2 && <span className="bg-orange-500/10 text-orange-600 px-2 py-1 text-xs font-semibold rounded-full">Limited</span>}
                                 </div>
                                 <div className="flex items-center gap-1 text-sm text-muted-foreground mb-2"><MapPin className="h-3 w-3" /> {item.location || "Not specified"}</div>
                                 <p className="text-lg font-bold text-primary mb-2">₹{item.price_per_day}/day</p>
-                                <p className="text-sm text-muted-foreground mb-2">Available Units: <span className="font-semibold text-foreground">{item.quantity}</span></p>
+                                <p className={`text-sm mb-2 ${isLowStock ? 'text-orange-600 font-semibold' : 'text-muted-foreground'}`}>Available Units: <span className="font-semibold text-foreground">{item.quantity}</span></p>
                                 {item.description && <p className="text-sm text-muted-foreground mb-4">{item.description}</p>}
                                 <Button className="w-full" onClick={() => setSelectedEquipment(item)}>Request Rental</Button>
                             </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 )}
 
@@ -112,6 +117,13 @@ const BrowseEquipmentPage = () => {
                         </DialogHeader>
 
                         <div className="grid gap-4 py-4">
+                            {selectedEquipment?.quantity && (
+                                <div className={`p-3 rounded-lg ${selectedEquipment.quantity <= 2 ? 'bg-orange-50 border border-orange-200' : 'bg-blue-50 border border-blue-200'}`}>
+                                    <p className={`text-sm font-semibold ${selectedEquipment.quantity <= 2 ? 'text-orange-700' : 'text-blue-700'}`}>
+                                        Available: {selectedEquipment.quantity} unit{selectedEquipment.quantity > 1 ? 's' : ''}
+                                    </p>
+                                </div>
+                            )}
                             <div className="grid grid-cols-4 items-center gap-4">
                                 <Label htmlFor="quantity" className="text-right">Quantity</Label>
                                 <Input id="quantity" type="number" className="col-span-3" value={quantity} onChange={e => setQuantity(e.target.value)} min="1" max={selectedEquipment?.quantity} />
