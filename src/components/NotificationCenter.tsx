@@ -6,7 +6,7 @@ import { useUserRole } from "@/hooks/useUserRole";
 import { useState, useEffect } from "react";
 import { getProfileId } from "@/lib/supabase-auth";
 import { useUser } from "@clerk/clerk-react";
-import { usePurchaseRequests } from "@/hooks/usePurchaseRequests";
+import { usePurchaseRequests, useFarmerPurchaseRequests } from "@/hooks/usePurchaseRequests";
 import { useOwnerBookings, useEquipmentBookings } from "@/hooks/useEquipmentBookings";
 import { useSupplyContracts } from "@/hooks/useSupplyContracts";
 import { useNavigate } from "react-router-dom";
@@ -27,8 +27,8 @@ export const NotificationCenter = ({ open, onOpenChange }: NotificationCenterPro
     }, [user?.id]);
 
     // Farmers: get pending purchase requests (incoming) - requests from hotels
-    const { data: cropRequests, isLoading: cropRequestsLoading } = usePurchaseRequests(
-        (role === "farmer" && profileId) ? { status: "pending", farmer_id: profileId } : undefined
+    const { data: cropRequests, isLoading: cropRequestsLoading } = useFarmerPurchaseRequests(
+        (role === "farmer" && profileId) ? profileId : ""
     );
     
     // Tool Owners: get pending equipment rentals (incoming)
