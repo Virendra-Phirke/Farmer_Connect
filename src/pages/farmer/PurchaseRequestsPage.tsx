@@ -61,16 +61,22 @@ const PurchaseRequestsPage = () => {
 
     const showBill = (req: any, paymentStatusOverride?: string, billingIdOverride?: string) => {
         const buyerName = req.buyer?.full_name || "Buyer";
-        const buyerPhone = req.buyer?.phone || "N/A";
         const buyerLocation = req.buyer?.location || "N/A";
+        const buyerState = req.buyer?.state || undefined;
+        const buyerDistrict = req.buyer?.district || undefined;
+        const buyerTaluka = req.buyer?.taluka || undefined;
+        const buyerVillageCity = req.buyer?.village_city || undefined;
         const cropName = req.crop_listing?.crop_name || "Crop";
         const computedAmount = req.total_amount || (req.quantity_kg * req.offered_price);
         const quantity = Number(req.quantity_kg || 0);
         const unitPrice = Number(req.offered_price || 0);
+        const billId = billingIdOverride || req.billing_id || `INV-PR-${req.id.slice(0, 8).toUpperCase()}`;
 
         setSelectedBill({
-            billId: billingIdOverride || req.billing_id || `INV-PR-${req.id.slice(0, 8).toUpperCase()}`,
-            billingId: billingIdOverride || req.billing_id || `INV-PR-${req.id.slice(0, 8).toUpperCase()}`,
+            title: `${cropName} - Purchase Request`,
+            receiptNumber: `RCPT-${billId.slice(0, 8).toUpperCase()}`,
+            billId,
+            billingId: billId,
             transactionId: req.id,
             date: new Date(req.created_at || new Date()).toLocaleDateString(),
             paymentConfirmedAt: req.payment_status === "paid" ? new Date(req.updated_at || req.created_at).toLocaleString() : undefined,
@@ -85,11 +91,21 @@ const PurchaseRequestsPage = () => {
                 phone: req.buyer?.phone,
                 email: req.buyer?.email,
                 address: buyerLocation,
+                state: buyerState,
+                district: buyerDistrict,
+                taluka: buyerTaluka,
+                village_city: buyerVillageCity,
             },
             seller: {
-                id: profileId || undefined,
-                name: user?.fullName || "Seller",
-                email: user?.primaryEmailAddress?.emailAddress || undefined,
+                id: req.crop_listing?.farmer?.id || profileId || undefined,
+                name: req.crop_listing?.farmer?.full_name || user?.fullName || "Seller",
+                phone: req.crop_listing?.farmer?.phone,
+                email: req.crop_listing?.farmer?.email || user?.primaryEmailAddress?.emailAddress || undefined,
+                address: req.crop_listing?.farmer?.location,
+                state: req.crop_listing?.farmer?.state,
+                district: req.crop_listing?.farmer?.district,
+                taluka: req.crop_listing?.farmer?.taluka,
+                village_city: req.crop_listing?.farmer?.village_city,
             },
             lineItems: [
                 {

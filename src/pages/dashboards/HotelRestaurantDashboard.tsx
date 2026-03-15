@@ -1,4 +1,4 @@
-import { Store, MapPin, ClipboardList, Truck } from "lucide-react";
+import { Store, MapPin, ClipboardList, Truck, Receipt } from "lucide-react";
 import { useUser } from "@clerk/clerk-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -20,6 +20,7 @@ const HotelRestaurantDashboard = () => {
         { icon: Store, title: "Browse Produce", description: "Find fresh crops from local farmers by location, crop type, and quantity", path: "/hotel/browse-produce" },
         { icon: ClipboardList, title: "My Crop Demands", description: "Post specific crop requirements for farmers to fulfill", path: "/hotel/my-requirements" },
         { icon: Truck, title: "Delivery Tracking", description: "Track your upcoming and past deliveries from farmers", path: "/hotel/delivery-tracking" },
+        { icon: Receipt, title: "Billing Center", description: "View, print, and download all purchase and contract bills", path: "/hotel/billing" },
         { icon: MapPin, title: "My Profile", description: "Update your restaurant/hotel details and preferences", path: "/profile" },
     ];
 

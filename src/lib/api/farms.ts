@@ -14,26 +14,61 @@ export interface Farm {
     farming_type?: string;
 }
 
-// Temporary implementation - stores farms as JSON in a profile_metadata table or returns empty
-// Once the farms table is created in Supabase, this will be updated to use the actual table
-
 export const getFarmsByProfileId = async (profileId: string): Promise<Farm[]> => {
-    // For now, return empty array until farms table is created
-    // In future, this will query the farms table
-    return [];
+    const { data, error } = await (supabase as any)
+        .from("farms")
+        .select("*")
+        .eq("profile_id", profileId)
+        .order("created_at", { ascending: false });
+
+    if (error) {
+        console.error("Error fetching farms:", error);
+        throw error;
+    }
+
+    return data || [];
 };
 
 export const createFarm = async (profileId: string, farm: Omit<Farm, "id">): Promise<Farm> => {
-    // Generate a temporary ID
-    const id = `farm_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    return { id, ...farm };
+    const { data, error } = await (supabase as any)
+        .from("farms")
+        .insert([{ ...farm, profile_id: profileId, updated_at: new Date().toISOString() }])
+        .select()
+        .single();
+
+    if (error) {
+        console.error("Error creating farm:", error);
+        throw error;
+    }
+
+    return data;
 };
 
 export const updateFarm = async (farmId: string, updates: Partial<Farm>): Promise<Farm> => {
-    throw new Error("Farm update not yet implemented. Please wait for database migration.");
+    const { data, error } = await (supabase as any)
+        .from("farms")
+        .update({ ...updates, updated_at: new Date().toISOString() })
+        .eq("id", farmId)
+        .select()
+        .single();
+
+    if (error) {
+        console.error("Error updating farm:", error);
+        throw error;
+    }
+
+    return data;
 };
 
 export const deleteFarm = async (farmId: string): Promise<void> => {
-    throw new Error("Farm deletion not yet implemented. Please wait for database migration.");
+    const { error } = await (supabase as any)
+        .from("farms")
+        .delete()
+        .eq("id", farmId);
+
+    if (error) {
+        console.error("Error deleting farm:", error);
+        throw error;
+    }
 };
 

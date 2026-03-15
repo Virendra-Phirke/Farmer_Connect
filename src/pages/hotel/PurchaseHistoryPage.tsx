@@ -14,16 +14,57 @@ const PurchaseHistoryPage = () => {
     const [selectedRequest, setSelectedRequest] = useState<any>(null);
 
     const showBill = (req: any) => {
+        const cropName = req.crop_listing?.crop_name || "Crop";
+        const computedAmount = req.total_amount || (req.quantity_kg * req.offered_price);
+        const quantity = Number(req.quantity_kg || 0);
+        const unitPrice = Number(req.offered_price || 0);
+        const billId = req.billing_id || `INV-${req.id.slice(0, 8).toUpperCase()}`;
+
         setSelectedRequest({
-            billingId: req.billing_id || `BILL-${req.id}`,
+            title: `${cropName} - Purchase Request`,
+            receiptNumber: `RCPT-${billId.slice(0, 8).toUpperCase()}`,
+            billId,
+            billingId: billId,
             transactionId: req.id,
-            transactionType: "Purchase Transaction",
-            title: `${req.quantity_kg} kg of ${req.crop_listing?.crop_name || "Crop"}`,
-            amount: req.total_amount || (req.quantity_kg * req.offered_price),
-            date: new Date(req.created_at).toLocaleDateString(),
-            buyerName: user?.fullName || "You",
-            sellerName: req.crop_listing?.farmer?.full_name || "Farmer",
+            transactionType: "Produce Purchase",
+            date: new Date(req.created_at || new Date()).toLocaleDateString(),
+            amount: computedAmount,
             paymentStatus: req.payment_status || "unpaid",
+            status: req.status || "accepted",
+            buyer: {
+                id: req.buyer?.id || profileId || undefined,
+                name: req.buyer?.full_name || user?.fullName || "Buyer",
+                phone: req.buyer?.phone,
+                email: req.buyer?.email || user?.primaryEmailAddress?.emailAddress || undefined,
+                address: req.buyer?.location,
+                state: req.buyer?.state,
+                district: req.buyer?.district,
+                taluka: req.buyer?.taluka,
+                village_city: req.buyer?.village_city,
+            },
+            seller: {
+                id: req.crop_listing?.farmer?.id,
+                name: req.crop_listing?.farmer?.full_name || "Farmer",
+                phone: req.crop_listing?.farmer?.phone,
+                email: req.crop_listing?.farmer?.email,
+                address: req.crop_listing?.location,
+                state: req.crop_listing?.farmer?.state,
+                district: req.crop_listing?.farmer?.district,
+                taluka: req.crop_listing?.farmer?.taluka,
+                village_city: req.crop_listing?.farmer?.village_city,
+            },
+            lineItems: [
+                {
+                    description: `${cropName} (${quantity} kg)`,
+                    quantity,
+                    unitPrice,
+                    amount: computedAmount,
+                }
+            ],
+            subtotal: computedAmount,
+            taxRate: 0,
+            taxAmount: 0,
+            total: computedAmount,
             originalRecord: req
         });
         setIsBillOpen(true);

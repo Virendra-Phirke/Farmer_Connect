@@ -33,7 +33,11 @@ export async function getPurchaseRequests(filters?: {
         email,
         phone,
         location,
-        avatar_url
+          state,
+          district,
+          taluka,
+          village_city,
+          avatar_url
       ),
       crop_listing:crop_listings!purchase_requests_crop_listing_id_fkey(
         id,
@@ -46,7 +50,12 @@ export async function getPurchaseRequests(filters?: {
           id,
           full_name,
           phone,
+          email,
           location,
+          state,
+          district,
+          taluka,
+          village_city,
           avatar_url
         )
       )
@@ -90,7 +99,11 @@ export async function getPurchaseRequestById(id: string) {
         email,
         phone,
         location,
-        avatar_url
+          state,
+          district,
+          taluka,
+          village_city,
+          avatar_url
       ),
       crop_listing:crop_listings!purchase_requests_crop_listing_id_fkey(
         id,
@@ -105,6 +118,10 @@ export async function getPurchaseRequestById(id: string) {
           phone,
           email,
           location,
+          state,
+          district,
+          taluka,
+          village_city,
           avatar_url
         )
       )
@@ -139,51 +156,119 @@ export async function updatePurchaseRequest(
     id: string,
     updates: Partial<PurchaseRequestInsert>
 ) {
-    // Filter out payment_status and billing_id if they might not exist in the schema yet
-    const filteredUpdates = { ...updates };
-    
-    // Try with all fields first
-    let { data, error } = await supabase
-        .from("purchase_requests")
-        .update({
-            ...filteredUpdates,
-            updated_at: new Date().toISOString(),
-        })
-        .eq("id", id)
-        .select()
-        .single();
+    const baseUpdates = { ...updates } as Record<string, unknown>;
 
-    // If the error is about payment_status column not existing, retry without it
-    if (error && error.code === "PGRST204" && error.message?.includes("payment_status")) {
-        console.warn("payment_status column not found in schema, updating without it:", error);
-        
-        // Remove payment_status and billing_id from updates
-        const { payment_status, billing_id, ...safeUpdates } = filteredUpdates;
-        
+    const isMissingColumnError = (err: any, column: string) => {
+        const msg = String(err?.message || "").toLowerCase();
+        const details = String(err?.details || "").toLowerCase();
+        const hint = String(err?.hint || "").toLowerCase();
+        const target = column.toLowerCase();
+        return (
+            msg.includes(target) ||
+            details.includes(target) ||
+            hint.includes(target)
+        );
+    };
+
+    const tryUpdate = async (payload: Record<string, unknown>, attempt: number) => {
+        console.log(`[Purchase Request Update - Attempt ${attempt}] ID: ${id}`, {
+            payload,
+            timestamp: new Date().toISOString(),
+        });
         const result = await supabase
             .from("purchase_requests")
-            .update({
-                ...safeUpdates,
-                updated_at: new Date().toISOString(),
-            })
+            .update(payload)
             .eq("id", id)
             .select()
             .single();
         
         if (result.error) {
-            console.error("Error updating purchase request (fallback):", result.error);
-            throw result.error;
+            console.error(`[Purchase Request Update - Attempt ${attempt} FAILED]`, {
+                id,
+                code: result.error.code,
+                status: result.error.status,
+                message: result.error.message,
+                details: result.error.details,
+                hint: result.error.hint,
+            });
         }
-        
+        return result;
+    };
+
+    const firstPayload = {
+        ...baseUpdates,
+        updated_at: new Date().toISOString(),
+    };
+
+    let result = await tryUpdate(firstPayload, 1);
+
+    if (!result.error) {
+        console.log("[Purchase Request Update - SUCCESS] Updated successfully on attempt 1");
         return result.data;
     }
 
-    if (error) {
-        console.error("Error updating purchase request:", error);
-        throw error;
+    // Retry strategy for older/partial schemas:
+    // 1) remove payment/billing columns if missing
+    // 2) remove updated_at if column missing
+    let fallbackPayload = { ...firstPayload } as Record<string, unknown>;
+
+    if (isMissingColumnError(result.error, "payment_status")) {
+        console.warn("[Purchase Request Update] Removing payment_status from payload (column appears missing)");
+        delete fallbackPayload.payment_status;
+    }
+    if (isMissingColumnError(result.error, "billing_id")) {
+        console.warn("[Purchase Request Update] Removing billing_id from payload (column appears missing)");
+        delete fallbackPayload.billing_id;
+    }
+    if (isMissingColumnError(result.error, "updated_at")) {
+        console.warn("[Purchase Request Update] Removing updated_at from payload (column appears missing)");
+        delete fallbackPayload.updated_at;
     }
 
-    return data;
+    // If nothing changed and still failed, proactively try safest payload
+    const shouldTrySafePayload =
+        Object.keys(fallbackPayload).length !== Object.keys(firstPayload).length ||
+        result.error.code === "PGRST204" ||
+        result.error.status === 400;
+
+    if (shouldTrySafePayload) {
+        const { payment_status, billing_id, updated_at, ...safeCore } = baseUpdates as any;
+        const minimalPayload = {
+            ...safeCore,
+            ...(isMissingColumnError(result.error, "updated_at") ? {} : { updated_at: new Date().toISOString() }),
+        };
+
+        result = await tryUpdate(
+            Object.keys(fallbackPayload).length ? fallbackPayload : minimalPayload,
+            2
+        );
+
+        if (!result.error) {
+            console.log("[Purchase Request Update - SUCCESS] Updated successfully on fallback attempt");
+            return result.data;
+        }
+    }
+
+    // Final attempt: try with just status field if that's what was being updated
+    if (baseUpdates.status && !result.error) {
+        console.log("[Purchase Request Update] Attempting minimal update with only status field");
+        result = await tryUpdate({ status: baseUpdates.status }, 3);
+        if (!result.error) {
+            console.log("[Purchase Request Update - SUCCESS] Updated successfully with minimal payload");
+            return result.data;
+        }
+    }
+
+    console.error("Error updating purchase request - ALL ATTEMPTS FAILED:", {
+        id,
+        attemptedUpdates: updates,
+        code: result.error?.code,
+        status: result.error?.status,
+        message: result.error?.message,
+        details: result.error?.details,
+        hint: result.error?.hint,
+    });
+    throw result.error;
 }
 
 export async function acceptPurchaseRequest(id: string) {
@@ -249,14 +334,30 @@ export async function getFarmerPurchaseRequests(farmerId: string) {
         email,
         phone,
         location,
-        avatar_url
+          state,
+          district,
+          taluka,
+          village_city,
+          avatar_url
       ),
       crop_listing:crop_listings!inner(
         id,
         crop_name,
         quantity_kg,
         price_per_kg,
-        farmer_id
+        farmer_id,
+        farmer:profiles!crop_listings_farmer_id_fkey(
+          id,
+          full_name,
+          email,
+          phone,
+          location,
+          state,
+          district,
+          taluka,
+          village_city,
+          avatar_url
+        )
       )
     `)
         .eq("crop_listing.farmer_id", farmerId)

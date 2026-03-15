@@ -6,7 +6,6 @@ export const useFarms = (profileId: string | null) => {
         queryKey: ["farms", profileId],
         queryFn: () => (profileId ? getFarmsByProfileId(profileId) : Promise.resolve([])),
         enabled: !!profileId,
-        staleTime: 5 * 60 * 1000,
     });
 };
 

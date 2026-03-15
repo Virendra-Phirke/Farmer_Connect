@@ -73,8 +73,18 @@ export function useAcceptPurchaseRequest() {
     return useMutation({
         mutationFn: (id: string) => acceptPurchaseRequest(id),
         onSuccess: () => {
+            console.log("[Accept Purchase Request] Success");
             queryClient.invalidateQueries({ queryKey: ["purchase-requests"] });
             queryClient.invalidateQueries({ queryKey: ["farmer-purchase-requests"] });
+        },
+        onError: (error: any) => {
+            console.error("[Accept Purchase Request] Error:", {
+                message: error?.message,
+                code: error?.code,
+                status: error?.status,
+                details: error?.details,
+                hint: error?.hint,
+            });
         },
     });
 }
@@ -85,8 +95,18 @@ export function useRejectPurchaseRequest() {
     return useMutation({
         mutationFn: (id: string) => rejectPurchaseRequest(id),
         onSuccess: () => {
+            console.log("[Reject Purchase Request] Success");
             queryClient.invalidateQueries({ queryKey: ["purchase-requests"] });
             queryClient.invalidateQueries({ queryKey: ["farmer-purchase-requests"] });
+        },
+        onError: (error: any) => {
+            console.error("[Reject Purchase Request] Error:", {
+                message: error?.message,
+                code: error?.code,
+                status: error?.status,
+                details: error?.details,
+                hint: error?.hint,
+            });
         },
     });
 }
@@ -97,9 +117,19 @@ export function useCompletePurchaseRequest() {
     return useMutation({
         mutationFn: (id: string) => completePurchaseRequest(id),
         onSuccess: () => {
+            console.log("[Complete Purchase Request] Success");
             queryClient.invalidateQueries({ queryKey: ["purchase-requests"] });
             queryClient.invalidateQueries({ queryKey: ["crop-listings"] });
             queryClient.invalidateQueries({ queryKey: ["farmer-purchase-requests"] });
+        },
+        onError: (error: any) => {
+            console.error("[Complete Purchase Request] Error:", {
+                message: error?.message,
+                code: error?.code,
+                status: error?.status,
+                details: error?.details,
+                hint: error?.hint,
+            });
         },
     });
 }

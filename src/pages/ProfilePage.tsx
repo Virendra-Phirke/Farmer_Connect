@@ -12,6 +12,7 @@ import { useFarms } from "@/hooks/useFarms";
 import { FarmsList } from "@/components/FarmsList";
 import { useFarmerEquipment } from "@/hooks/useFarmerEquipment";
 import { EquipmentList } from "@/components/EquipmentList";
+import { useIndianLocations } from "@/hooks/useIndianLocations";
 
 const ProfilePage = () => {
     const { user } = useUser();
@@ -24,8 +25,16 @@ const ProfilePage = () => {
     const [fullName, setFullName] = useState("");
     const [email, setEmail] = useState("");
     const [phone, setPhone] = useState("");
-    const [locationName, setLocationName] = useState("");
     const [availableEquipment, setAvailableEquipment] = useState("");
+
+    // Structured location fields (for all user types)
+    const [state, setState] = useState("");
+    const [district, setDistrict] = useState("");
+    const [subDistrict, setSubDistrict] = useState("");
+    const [villageCity, setVillageCity] = useState("");
+
+    // Use Indian Locations Hook
+    const { states, districts, subDistricts, villages, isLoading: locationsLoading } = useIndianLocations(state, district, subDistrict);
 
     // Use Farms and Equipment Hooks
     const { data: farms, isLoading: farmsLoading } = useFarms(profileId);
@@ -53,8 +62,13 @@ const ProfilePage = () => {
                 setFullName(profileData.full_name || user.fullName || "");
                 setEmail(profileData.email || user.primaryEmailAddress?.emailAddress || "");
                 setPhone(profileData.phone || "");
-                setLocationName(profileData.location || "");
                 setAvailableEquipment(profileData.available_equipment || "");
+
+                // Load structured location fields
+                setState(profileData.state || "");
+                setDistrict(profileData.district || "");
+                setSubDistrict(profileData.taluka || "");
+                setVillageCity(profileData.village_city || "");
             }
             setIsLoading(false);
         }
@@ -68,13 +82,18 @@ const ProfilePage = () => {
             await updateUserProfile(user.id, {
                 full_name: fullName || null,
                 phone: phone || null,
-                // Location is now string name for non-farmers
-                location: role !== "farmer" ? (locationName || null) : null,
                 // Equipment for farmer and equipment owners
                 available_equipment: (role === "farmer" || role === "equipment_owner") ? (availableEquipment || null) : null,
+                // Structured location for all users
+                state: state || null,
+                district: district || null,
+                taluka: subDistrict || null,
+                village_city: villageCity || null,
+                location: [villageCity, subDistrict, district, state].filter(Boolean).join(', ') || null,
             });
             toast.success("Profile saved successfully!");
-        } catch {
+        } catch (error) {
+            console.error("Profile save error:", error);
             toast.error("Failed to save profile");
         } finally {
             setIsSaving(false);
@@ -110,12 +129,65 @@ const ProfilePage = () => {
                             <Label htmlFor="phone">Phone</Label>
                             <Input id="phone" value={phone} onChange={e => setPhone(e.target.value)} placeholder="+91..." />
                         </div>
-                        {role !== "farmer" && (
-                            <div className="space-y-2">
-                                <Label htmlFor="locationName">Location (City/Village)</Label>
-                                <Input id="locationName" value={locationName} onChange={e => setLocationName(e.target.value)} placeholder="e.g. Pune, Maharashtra" />
-                            </div>
-                        )}
+                    </div>
+                </section>
+
+                {/* Detailed Location Section - for all roles */}
+                <section className="bg-card rounded-xl border border-border p-6 space-y-4">
+                    <h2 className="font-display text-xl font-semibold">Detailed Location Information</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="state">State</Label>
+                            <Select value={state} onValueChange={setState}>
+                                <SelectTrigger id="state">
+                                    <SelectValue placeholder="Select State" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {states.map(s => (
+                                        <SelectItem key={s} value={s}>{s}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="district">District</Label>
+                            <Select value={district} onValueChange={setDistrict} disabled={!state || locationsLoading}>
+                                <SelectTrigger id="district">
+                                    <SelectValue placeholder="Select District" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {districts.map(d => (
+                                        <SelectItem key={d} value={d}>{d}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="subdistrict">Taluka / Sub-District</Label>
+                            <Select value={subDistrict} onValueChange={setSubDistrict} disabled={!district || locationsLoading}>
+                                <SelectTrigger id="subdistrict">
+                                    <SelectValue placeholder="Select Taluka" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {subDistricts.map(s => (
+                                        <SelectItem key={s} value={s}>{s}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="village">Village / City</Label>
+                            <Select value={villageCity} onValueChange={setVillageCity} disabled={!subDistrict || locationsLoading}>
+                                <SelectTrigger id="village">
+                                    <SelectValue placeholder="Select Village / City" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {villages.map(v => (
+                                        <SelectItem key={v} value={v}>{v}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
                     </div>
                 </section>
 

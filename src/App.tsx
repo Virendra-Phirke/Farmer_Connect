@@ -46,9 +46,22 @@ const MyCropRequirementsPage = lazy(() => import('./pages/hotel/MyCropRequiremen
 const DeliveryTrackingPage = lazy(() => import('./pages/hotel/DeliveryTrackingPage'));
 const PurchaseHistoryPage = lazy(() => import('./pages/hotel/PurchaseHistoryPage'));
 const SupplyContractsPage = lazy(() => import('./pages/hotel/SupplyContractsPage'));
+const HotelBillingPage = lazy(() => import('./pages/hotel/BillingPage'));
 
 const queryClient = new QueryClient({
-  defaultOptions: { queries: { staleTime: 60 * 1000, retry: 1 } },
+  defaultOptions: {
+    queries: {
+      // Data is never considered stale globally. It will never auto-refetch.
+      // Real-time operations (like chat) will handle their own updates.
+      // For standard data, rely on the exact manual user refresh or explicit invalidation.
+      staleTime: Infinity,
+      gcTime: 24 * 60 * 60 * 1000, // 24 hours cache time
+      retry: 1,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
+      refetchOnMount: false,
+    },
+  },
 });
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => (
@@ -119,6 +132,7 @@ const App = () => (
                 <Route path="/hotel/my-requirements" element={<ProtectedRoute><MyCropRequirementsPage /></ProtectedRoute>} />
                 <Route path="/hotel/delivery-tracking" element={<ProtectedRoute><DeliveryTrackingPage /></ProtectedRoute>} />
                 <Route path="/hotel/contracts" element={<ProtectedRoute><SupplyContractsPage /></ProtectedRoute>} />
+                <Route path="/hotel/billing" element={<ProtectedRoute><HotelBillingPage /></ProtectedRoute>} />
 
                 <Route path="*" element={<NotFound />} />
               </Routes>

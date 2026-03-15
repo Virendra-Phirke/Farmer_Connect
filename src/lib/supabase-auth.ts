@@ -197,10 +197,10 @@ export async function getUserProfile(clerkUserId: string): Promise<UserProfile |
     soil_type: farmerData?.soil_type || null,
     farming_type: farmerData?.farming_type || null,
     available_equipment: farmerData?.available_equipment || equipmentOwnerData?.available_equipment || null,
-    state: farmerData?.state || null,
-    district: farmerData?.district || null,
-    taluka: farmerData?.taluka || null,
-    village_city: farmerData?.village_city || null,
+    state: data.state || farmerData?.state || null,
+    district: data.district || farmerData?.district || null,
+    taluka: data.taluka || farmerData?.taluka || null,
+    village_city: data.village_city || farmerData?.village_city || null,
     survey_number: farmerData?.survey_number || null,
     gat_number: farmerData?.gat_number || null,
   };
@@ -221,13 +221,15 @@ export async function updateUserProfile(
   clerkUserId: string,
   updates: Partial<UserProfile>
 ) {
-  // 1. Update the base 'profiles' table
-  const baseUpdates = {
-    full_name: updates.full_name,
-    phone: updates.phone,
-    location: updates.location,
-    updated_at: new Date().toISOString(),
-  };
+  // 1. Update the base 'profiles' table with only explicitly provided fields
+  const baseUpdates: any = { updated_at: new Date().toISOString() };
+  if (updates.full_name !== undefined) baseUpdates.full_name = updates.full_name;
+  if (updates.phone !== undefined) baseUpdates.phone = updates.phone;
+  if (updates.location !== undefined) baseUpdates.location = updates.location;
+  if (updates.state !== undefined) baseUpdates.state = updates.state;
+  if (updates.district !== undefined) baseUpdates.district = updates.district;
+  if (updates.taluka !== undefined) baseUpdates.taluka = updates.taluka;
+  if (updates.village_city !== undefined) baseUpdates.village_city = updates.village_city;
 
   const { data: baseData, error: baseError } = await supabase
     .from("profiles")
@@ -247,25 +249,27 @@ export async function updateUserProfile(
   if (role === "farmer") {
     const farmerUpdates: any = {
       profile_id: profileId,
-      land_size_acres: updates.land_size_acres !== undefined ? updates.land_size_acres : null,
-      soil_type: updates.soil_type !== undefined ? updates.soil_type : null,
-      farming_type: updates.farming_type !== undefined ? updates.farming_type : null,
-      available_equipment: updates.available_equipment !== undefined ? updates.available_equipment : null,
-      state: updates.state !== undefined ? updates.state : 'Maharashtra',
-      district: updates.district !== undefined ? updates.district : null,
-      taluka: updates.taluka !== undefined ? updates.taluka : null,
-      village_city: updates.village_city !== undefined ? updates.village_city : null,
-      survey_number: updates.survey_number !== undefined ? updates.survey_number : null,
-      gat_number: updates.gat_number !== undefined ? updates.gat_number : null,
       updated_at: new Date().toISOString(),
     };
+    if (updates.land_size_acres !== undefined) farmerUpdates.land_size_acres = updates.land_size_acres;
+    if (updates.soil_type !== undefined) farmerUpdates.soil_type = updates.soil_type;
+    if (updates.farming_type !== undefined) farmerUpdates.farming_type = updates.farming_type;
+    if (updates.available_equipment !== undefined) farmerUpdates.available_equipment = updates.available_equipment;
+    if (updates.state !== undefined) farmerUpdates.state = updates.state;
+    if (updates.district !== undefined) farmerUpdates.district = updates.district;
+    if (updates.taluka !== undefined) farmerUpdates.taluka = updates.taluka;
+    if (updates.village_city !== undefined) farmerUpdates.village_city = updates.village_city;
+    if (updates.survey_number !== undefined) farmerUpdates.survey_number = updates.survey_number;
+    if (updates.gat_number !== undefined) farmerUpdates.gat_number = updates.gat_number;
+
     await (supabase as any).from("farmer_profiles").upsert(farmerUpdates, { onConflict: "profile_id" });
   } else if (role === "equipment_owner") {
     const equipmentOwnerUpdates: any = {
       profile_id: profileId,
-      available_equipment: updates.available_equipment !== undefined ? updates.available_equipment : null,
       updated_at: new Date().toISOString(),
     };
+    if (updates.available_equipment !== undefined) equipmentOwnerUpdates.available_equipment = updates.available_equipment;
+    
     await (supabase as any).from("equipment_owner_profiles").upsert(equipmentOwnerUpdates, { onConflict: "profile_id" });
   }
 

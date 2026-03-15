@@ -30,17 +30,54 @@ const SupplyContractsPage = () => {
 
     const showBill = (contract: any) => {
         const quantityPerDelivery = contract.quantity_kg_per_delivery ?? contract.quantity_per_delivery ?? 0;
-        const amount = contract.price_per_kg * quantityPerDelivery;
+        const computedAmount = contract.price_per_kg * quantityPerDelivery;
+        const billId = contract.id.slice(0, 8).toUpperCase();
+
         setSelectedContract({
-            billingId: `CONT-${contract.id}`,
+            title: `${contract.crop_name} - Supply Contract`,
+            receiptNumber: `RCPT-${billId}`,
+            billId: `CONT-${billId}`,
+            billingId: `CONT-${billId}`,
             transactionId: contract.id,
             transactionType: "Supply Contract Delivery",
-            title: `${quantityPerDelivery} kg of ${contract.crop_name} (${contract.delivery_frequency})`,
-            amount: amount,
             date: new Date(contract.start_date || contract.created_at).toLocaleDateString(),
-            buyerName: user?.fullName || "You",
-            sellerName: contract.farmer?.full_name || "Farmer",
+            amount: computedAmount,
             paymentStatus: contract.payment_status || "unpaid",
+            status: contract.status || "pending",
+            buyer: {
+                id: contract.buyer?.id || profileId || undefined,
+                name: contract.buyer?.full_name || user?.fullName || "Buyer",
+                phone: contract.buyer?.phone,
+                email: contract.buyer?.email || user?.primaryEmailAddress?.emailAddress || undefined,
+                address: contract.buyer?.location,
+                state: contract.buyer?.state,
+                district: contract.buyer?.district,
+                taluka: contract.buyer?.taluka,
+                village_city: contract.buyer?.village_city,
+            },
+            seller: {
+                id: contract.farmer?.id,
+                name: contract.farmer?.full_name || "Farmer",
+                phone: contract.farmer?.phone,
+                email: contract.farmer?.email,
+                address: contract.farmer?.location,
+                state: contract.farmer?.state,
+                district: contract.farmer?.district,
+                taluka: contract.farmer?.taluka,
+                village_city: contract.farmer?.village_city,
+            },
+            lineItems: [
+                {
+                    description: `${contract.crop_name} - ${contract.delivery_frequency} delivery (${quantityPerDelivery} kg)`,
+                    quantity: 1,
+                    unitPrice: computedAmount,
+                    amount: computedAmount,
+                }
+            ],
+            subtotal: computedAmount,
+            taxRate: 0,
+            taxAmount: 0,
+            total: computedAmount,
             originalRecord: contract
         });
         setIsBillOpen(true);

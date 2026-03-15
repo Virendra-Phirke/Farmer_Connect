@@ -17,15 +17,54 @@ const RentalHistoryPage = () => {
     const { toast } = useToast();
 
     const showBill = (booking: any) => {
+        const amount = Number(booking.total_price || 0);
+        const billId = booking.billing_id || `INV-RENT-${booking.id.slice(0, 8).toUpperCase()}`;
+
         setSelectedBooking({
-            billingId: booking.billing_id || `BILL-${booking.id}`,
+            title: `${booking.equipment?.name || "Equipment"} - Equipment Rental`,
+            receiptNumber: `RCPT-${billId.slice(0, 8).toUpperCase()}`,
+            billId,
+            billingId: billId,
+            transactionId: booking.id,
             transactionType: "Equipment Rental",
-            title: `${booking.equipment?.name || "Equipment"} (${booking.start_date} to ${booking.end_date})`,
-            amount: booking.total_price,
             date: new Date(booking.created_at).toLocaleDateString(),
-            buyerName: user?.fullName || "You",
-            sellerName: booking.equipment?.owner?.full_name || "Unknown Owner",
+            amount,
             paymentStatus: getEquipmentPaymentStatus(booking),
+            status: booking.status,
+            buyer: {
+                id: booking.renter?.id || profileId || undefined,
+                name: booking.renter?.full_name || user?.fullName || "Renter",
+                phone: booking.renter?.phone,
+                email: booking.renter?.email || user?.primaryEmailAddress?.emailAddress || undefined,
+                address: booking.renter?.location,
+                state: booking.renter?.state,
+                district: booking.renter?.district,
+                taluka: booking.renter?.taluka,
+                village_city: booking.renter?.village_city,
+            },
+            seller: {
+                id: booking.equipment?.owner?.id,
+                name: booking.equipment?.owner?.full_name || "Equipment Owner",
+                phone: booking.equipment?.owner?.phone,
+                email: booking.equipment?.owner?.email,
+                address: booking.equipment?.owner?.location,
+                state: booking.equipment?.owner?.state,
+                district: booking.equipment?.owner?.district,
+                taluka: booking.equipment?.owner?.taluka,
+                village_city: booking.equipment?.owner?.village_city,
+            },
+            lineItems: [
+                {
+                    description: `${booking.equipment?.name || "Equipment"} (${booking.start_date} → ${booking.end_date})`,
+                    quantity: 1,
+                    unitPrice: amount,
+                    amount,
+                }
+            ],
+            subtotal: amount,
+            taxRate: 0,
+            taxAmount: 0,
+            total: amount,
             originalRecord: booking
         });
         setIsBillOpen(true);

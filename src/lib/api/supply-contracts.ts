@@ -35,7 +35,11 @@ export async function getSupplyContracts(filters?: {
         email,
         phone,
         location,
-        avatar_url
+          state,
+          district,
+          taluka,
+          village_city,
+          avatar_url
       ),
       farmer:profiles!supply_contracts_farmer_id_fkey(
         id,
@@ -43,7 +47,11 @@ export async function getSupplyContracts(filters?: {
         email,
         phone,
         location,
-        avatar_url
+          state,
+          district,
+          taluka,
+          village_city,
+          avatar_url
       )
     `)
         .order("created_at", { ascending: false });
@@ -85,7 +93,11 @@ export async function getSupplyContractById(id: string) {
         email,
         phone,
         location,
-        avatar_url
+          state,
+          district,
+          taluka,
+          village_city,
+          avatar_url
       ),
       farmer:profiles!supply_contracts_farmer_id_fkey(
         id,
@@ -93,7 +105,11 @@ export async function getSupplyContractById(id: string) {
         email,
         phone,
         location,
-        avatar_url
+          state,
+          district,
+          taluka,
+          village_city,
+          avatar_url
       )
     `)
         .eq("id", id)

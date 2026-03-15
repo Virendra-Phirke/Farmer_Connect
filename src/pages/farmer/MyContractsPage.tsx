@@ -34,10 +34,14 @@ const MyContractsPage = () => {
 
     const openBill = (contract: any) => {
         const amount = Number(contract.price_per_kg * contract.quantity_kg_per_delivery || 0);
+        const billId = contract.billing_id || `INV-SC-${contract.id.slice(0, 8).toUpperCase()}`;
+        
         setSelectedBill({
+            title: `${contract.crop_name} - Supply Contract`,
+            receiptNumber: `RCPT-${billId.slice(0, 8).toUpperCase()}`,
             source: "supply",
-            billId: contract.billing_id || `INV-SC-${contract.id.slice(0, 8).toUpperCase()}`,
-            billingId: contract.billing_id || `INV-SC-${contract.id.slice(0, 8).toUpperCase()}`,
+            billId,
+            billingId: billId,
             transactionId: contract.id,
             transactionType: "Supply Contract Delivery",
             date: new Date(contract.created_at || new Date()).toLocaleDateString(),
@@ -51,11 +55,21 @@ const MyContractsPage = () => {
                 phone: contract.buyer?.phone,
                 email: contract.buyer?.email,
                 address: contract.buyer?.location,
+                state: contract.buyer?.state,
+                district: contract.buyer?.district,
+                taluka: contract.buyer?.taluka,
+                village_city: contract.buyer?.village_city,
             },
             seller: {
-                id: profileId || undefined,
-                name: user?.fullName || "Farmer",
-                email: user?.primaryEmailAddress?.emailAddress || undefined,
+                id: contract.farmer?.id || profileId || undefined,
+                name: contract.farmer?.full_name || user?.fullName || "Farmer",
+                phone: contract.farmer?.phone,
+                email: contract.farmer?.email || user?.primaryEmailAddress?.emailAddress || undefined,
+                address: contract.farmer?.location,
+                state: contract.farmer?.state,
+                district: contract.farmer?.district,
+                taluka: contract.farmer?.taluka,
+                village_city: contract.farmer?.village_city,
             },
             lineItems: [
                 {
@@ -77,10 +91,14 @@ const MyContractsPage = () => {
 
     const openRentalBill = (booking: any) => {
         const amount = Number(booking.total_price || 0);
+        const billId = booking.billing_id || `INV-RENT-${booking.id.slice(0, 8).toUpperCase()}`;
+        
         setSelectedBill({
+            title: `${booking.equipment?.name || "Equipment"} - Equipment Rental`,
+            receiptNumber: `RCPT-${billId.slice(0, 8).toUpperCase()}`,
             source: "rental",
-            billId: booking.billing_id || `INV-RENT-${booking.id.slice(0, 8).toUpperCase()}`,
-            billingId: booking.billing_id || `INV-RENT-${booking.id.slice(0, 8).toUpperCase()}`,
+            billId,
+            billingId: billId,
             transactionId: booking.id,
             transactionType: "Equipment Rental",
             date: new Date(booking.created_at || new Date()).toLocaleDateString(),
@@ -89,15 +107,26 @@ const MyContractsPage = () => {
             status: booking.status || "confirmed",
             buyerName: user?.fullName || "Renter",
             buyer: {
-                id: profileId || undefined,
-                name: user?.fullName || "Renter",
-                email: user?.primaryEmailAddress?.emailAddress || undefined,
+                id: booking.renter?.id || profileId || undefined,
+                name: booking.renter?.full_name || user?.fullName || "Renter",
+                phone: booking.renter?.phone,
+                email: booking.renter?.email || user?.primaryEmailAddress?.emailAddress || undefined,
+                address: booking.renter?.location,
+                state: booking.renter?.state,
+                district: booking.renter?.district,
+                taluka: booking.renter?.taluka,
+                village_city: booking.renter?.village_city,
             },
             seller: {
                 id: booking.equipment?.owner?.id,
                 name: booking.equipment?.owner?.full_name || "Equipment Owner",
                 phone: booking.equipment?.owner?.phone,
+                email: booking.equipment?.owner?.email,
                 address: booking.equipment?.owner?.location,
+                state: booking.equipment?.owner?.state,
+                district: booking.equipment?.owner?.district,
+                taluka: booking.equipment?.owner?.taluka,
+                village_city: booking.equipment?.owner?.village_city,
             },
             lineItems: [
                 {

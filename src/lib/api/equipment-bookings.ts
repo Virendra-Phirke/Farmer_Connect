@@ -53,16 +53,27 @@ export async function getEquipmentBookings(filters?: {
         owner:profiles!equipment_listings_owner_id_fkey(
           id,
           full_name,
+          email,
           phone,
+          location,
+          state,
+          district,
+          taluka,
+          village_city,
           avatar_url
         )
       ),
       renter:profiles!equipment_bookings_renter_id_fkey(
         id,
         full_name,
+        email,
         phone,
         location,
-        avatar_url
+          state,
+          district,
+          taluka,
+          village_city,
+          avatar_url
       )
     `)
         .order("created_at", { ascending: false });
@@ -104,18 +115,27 @@ export async function getEquipmentBookingById(id: string) {
         owner:profiles!equipment_listings_owner_id_fkey(
           id,
           full_name,
-          phone,
           email,
+          phone,
+          location,
+          state,
+          district,
+          taluka,
+          village_city,
           avatar_url
         )
       ),
       renter:profiles!equipment_bookings_renter_id_fkey(
         id,
         full_name,
-        phone,
         email,
+        phone,
         location,
-        avatar_url
+          state,
+          district,
+          taluka,
+          village_city,
+          avatar_url
       )
     `)
         .eq("id", id)
@@ -326,7 +346,11 @@ export async function getOwnerBookings(ownerId: string) {
         full_name,
         phone,
         location,
-        avatar_url
+          state,
+          district,
+          taluka,
+          village_city,
+          avatar_url
       )
     `)
         .eq("equipment.owner_id", ownerId)
