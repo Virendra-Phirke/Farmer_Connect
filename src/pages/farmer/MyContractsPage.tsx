@@ -63,7 +63,7 @@ const MyContractsPage = () => {
             seller: {
                 id: contract.farmer?.id || profileId || undefined,
                 name: contract.farmer?.full_name || user?.fullName || "Farmer",
-                phone: contract.farmer?.phone,
+                phone: contract.farmer?.phone || user?.phoneNumbers?.[0]?.phoneNumber,
                 email: contract.farmer?.email || user?.primaryEmailAddress?.emailAddress || undefined,
                 address: contract.farmer?.location,
                 state: contract.farmer?.state,

@@ -69,7 +69,7 @@ const RentalRequestsPage = () => {
             seller: {
                 id: booking.equipment?.owner?.id || profileId || undefined,
                 name: booking.equipment?.owner?.full_name || user?.fullName || "Equipment Owner",
-                phone: booking.equipment?.owner?.phone,
+                phone: booking.equipment?.owner?.phone || user?.phoneNumbers?.[0]?.phoneNumber,
                 email: booking.equipment?.owner?.email || user?.primaryEmailAddress?.emailAddress || undefined,
                 address: booking.equipment?.owner?.location,
                 state: booking.equipment?.owner?.state,

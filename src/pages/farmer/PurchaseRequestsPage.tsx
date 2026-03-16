@@ -76,7 +76,8 @@ const PurchaseRequestsPage = () => {
         const farmer = req.crop_listing?.farmer;
         const sellerName = farmer?.full_name || user?.fullName || "Seller";
         const sellerEmail = farmer?.email || user?.primaryEmailAddress?.emailAddress;
-        const sellerPhone = farmer?.phone;
+        // For phone and location, prefer farmer data but fallback to current user (since farmer might not have filled profile yet)
+        const sellerPhone = farmer?.phone || user?.phoneNumbers?.[0]?.phoneNumber;
         const sellerLocation = farmer?.location;
         const sellerState = farmer?.state;
         const sellerDistrict = farmer?.district;
