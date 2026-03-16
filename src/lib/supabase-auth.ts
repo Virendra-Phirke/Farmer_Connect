@@ -223,7 +223,7 @@ export async function getUserRole(clerkUserId: string): Promise<UserRole | null>
 }
 
 export async function getUserProfile(clerkUserId: string): Promise<UserProfile | null> {
-  // Primary query (new schema)
+  // Primary query (new schema) - ALWAYS fetch phone from all tables
   const { data: primaryData, error: primaryError } = await (supabase as any)
     .from("profiles")
     .select(`
@@ -262,6 +262,10 @@ export async function getUserProfile(clerkUserId: string): Promise<UserProfile |
   // Flatten the joined data into the single flat UserProfile interface expected by exactly the frontend
   const farmerData = data.farmer_profiles && Array.isArray(data.farmer_profiles) ? data.farmer_profiles[0] : (data.farmer_profiles || {});
   const equipmentOwnerData = data.equipment_owner_profiles && Array.isArray(data.equipment_owner_profiles) ? data.equipment_owner_profiles[0] : (data.equipment_owner_profiles || {});
+  const buyerData = data.buyer_profiles && Array.isArray(data.buyer_profiles) ? data.buyer_profiles[0] : (data.buyer_profiles || {});
+
+  // Priority for phone: 1) profiles table, 2) equipment_owner_profiles, 3) buyer_profiles
+  const phoneNumber = data.phone || equipmentOwnerData?.mobile_number || buyerData?.mobile_number || null;
 
   return {
     id: data.id,
@@ -269,7 +273,7 @@ export async function getUserProfile(clerkUserId: string): Promise<UserProfile |
     full_name: data.full_name,
     email: data.email,
     avatar_url: data.avatar_url,
-    phone: data.phone,
+    phone: phoneNumber,
     location: data.location,
     created_at: data.created_at,
     updated_at: data.updated_at,
@@ -286,6 +290,61 @@ export async function getUserProfile(clerkUserId: string): Promise<UserProfile |
     survey_number: farmerData?.survey_number || null,
     gat_number: farmerData?.gat_number || null,
   };
+}
+
+export async function getCompleteUserDataForBilling(clerkUserId: string) {
+  try {
+    // Fetch from profiles table with all related role tables
+    const { data, error } = await (supabase as any)
+      .from("profiles")
+      .select(`
+        id,
+        clerk_user_id,
+        full_name,
+        email,
+        phone,
+        location,
+        state,
+        district,
+        taluka,
+        village_city,
+        landmark,
+        avatar_url,
+        created_at,
+        updated_at,
+        farmer_profiles(land_size_acres, soil_type, farming_type, available_equipment, state, district, taluka, village_city, survey_number, gat_number),
+        equipment_owner_profiles(available_equipment, mobile_number),
+        buyer_profiles(mobile_number)
+      `)
+      .eq("clerk_user_id", clerkUserId)
+      .maybeSingle();
+
+    if (error) {
+      console.error("Error fetching complete billing data:", error);
+      return null;
+    }
+
+    if (!data) return null;
+
+    // Extract phone from all possible sources
+    const farmerData = data.farmer_profiles && Array.isArray(data.farmer_profiles) ? data.farmer_profiles[0] : null;
+    const equipmentOwnerData = data.equipment_owner_profiles && Array.isArray(data.equipment_owner_profiles) ? data.equipment_owner_profiles[0] : null;
+    const buyerData = data.buyer_profiles && Array.isArray(data.buyer_profiles) ? data.buyer_profiles[0] : null;
+
+    // Phone priority: profiles table > role-specific tables
+    const phone = data.phone || equipmentOwnerData?.mobile_number || buyerData?.mobile_number || null;
+
+    return {
+      ...data,
+      phone,
+      farmer_profiles: farmerData,
+      equipment_owner_profiles: equipmentOwnerData,
+      buyer_profiles: buyerData,
+    };
+  } catch (error) {
+    console.error("Exception in getCompleteUserDataForBilling:", error);
+    return null;
+  }
 }
 
 export async function getProfileId(clerkUserId: string): Promise<string | null> {

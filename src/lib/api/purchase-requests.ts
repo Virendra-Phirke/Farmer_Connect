@@ -85,6 +85,47 @@ export async function getPurchaseRequests(filters?: {
         throw error;
     }
 
+    // Enrich with latest profile data to ensure fresh phone numbers
+    if (data && data.length > 0) {
+        try {
+            const enrichedData = await Promise.all(
+                data.map(async (request: any) => {
+                    const enrichedRequest = { ...request };
+
+                    // Refresh buyer profile phone
+                    if (request.buyer_id) {
+                        const { data: freshBuyer } = await supabase
+                            .from("profiles")
+                            .select("phone")
+                            .eq("id", request.buyer_id)
+                            .maybeSingle();
+                        if (freshBuyer && enrichedRequest.buyer) {
+                            enrichedRequest.buyer.phone = freshBuyer.phone;
+                        }
+                    }
+
+                    // Refresh farmer profile phone via crop_listing
+                    if (request.crop_listing?.farmer?.id) {
+                        const { data: freshFarmer } = await supabase
+                            .from("profiles")
+                            .select("phone")
+                            .eq("id", request.crop_listing.farmer.id)
+                            .maybeSingle();
+                        if (freshFarmer && enrichedRequest.crop_listing?.farmer) {
+                            enrichedRequest.crop_listing.farmer.phone = freshFarmer.phone;
+                        }
+                    }
+
+                    return enrichedRequest;
+                })
+            );
+            return enrichedData;
+        } catch (enrichError) {
+            console.warn("Error enriching purchase requests with fresh data:", enrichError);
+            return data; // Return original data if enrichment fails
+        }
+    }
+
     return data;
 }
 

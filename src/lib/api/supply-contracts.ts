@@ -84,6 +84,47 @@ export async function getSupplyContracts(filters?: {
         throw error;
     }
 
+    // Enrich with latest profile data to ensure fresh phone numbers
+    if (data && data.length > 0) {
+        try {
+            const enrichedData = await Promise.all(
+                data.map(async (contract: any) => {
+                    const enrichedContract = { ...contract };
+
+                    // Refresh buyer profile phone
+                    if (contract.buyer_id) {
+                        const { data: freshBuyer } = await supabase
+                            .from("profiles")
+                            .select("phone")
+                            .eq("id", contract.buyer_id)
+                            .maybeSingle();
+                        if (freshBuyer && enrichedContract.buyer) {
+                            enrichedContract.buyer.phone = freshBuyer.phone;
+                        }
+                    }
+
+                    // Refresh farmer profile phone
+                    if (contract.farmer_id) {
+                        const { data: freshFarmer } = await supabase
+                            .from("profiles")
+                            .select("phone")
+                            .eq("id", contract.farmer_id)
+                            .maybeSingle();
+                        if (freshFarmer && enrichedContract.farmer) {
+                            enrichedContract.farmer.phone = freshFarmer.phone;
+                        }
+                    }
+
+                    return enrichedContract;
+                })
+            );
+            return enrichedData;
+        } catch (enrichError) {
+            console.warn("Error enriching supply contracts with fresh data:", enrichError);
+            return data; // Return original data if enrichment fails
+        }
+    }
+
     return data;
 }
 

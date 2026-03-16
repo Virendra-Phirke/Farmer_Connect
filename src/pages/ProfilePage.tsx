@@ -89,6 +89,14 @@ const ProfilePage = () => {
                 landmark: landmark || null,
                 location: [landmark, villageCity, subDistrict, district, state].filter(Boolean).join(', ') || null,
             });
+            
+            // Refresh the profile data from database to ensure all changes persisted
+            const updatedProfile = await getUserProfile(user.id);
+            if (updatedProfile) {
+                setProfile(updatedProfile);
+                setPhone(updatedProfile.phone || "");
+            }
+            
             toast.success("Profile saved successfully!");
         } catch (error) {
             console.error("Profile save error:", error);
