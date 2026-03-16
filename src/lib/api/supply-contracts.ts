@@ -85,14 +85,15 @@ export async function getSupplyContracts(filters?: {
     }
 
     // Enrich with latest profile data to ensure fresh phone numbers
+    // IMPORTANT: Only enriches display data, never modifies database
     if (data && data.length > 0) {
         try {
             const enrichedData = await Promise.all(
                 data.map(async (contract: any) => {
                     const enrichedContract = { ...contract };
 
-                    // Refresh buyer profile phone - check all sources
-                    if (contract.buyer_id) {
+                    // Refresh buyer profile phone - check all sources, but don't overwrite if already present
+                    if (contract.buyer_id && contract.buyer) {
                         const { data: freshBuyer } = await (supabase as any)
                             .from("profiles")
                             .select(`
@@ -105,12 +106,16 @@ export async function getSupplyContracts(filters?: {
                         if (freshBuyer && enrichedContract.buyer) {
                             const buyerRoleData = Array.isArray(freshBuyer.buyer_profiles) ? freshBuyer.buyer_profiles[0] : freshBuyer.buyer_profiles;
                             const equipmentRoleData = Array.isArray(freshBuyer.equipment_owner_profiles) ? freshBuyer.equipment_owner_profiles[0] : freshBuyer.equipment_owner_profiles;
-                            enrichedContract.buyer.phone = freshBuyer.phone || buyerRoleData?.mobile_number || equipmentRoleData?.mobile_number;
+                            const freshPhone = freshBuyer.phone || buyerRoleData?.mobile_number || equipmentRoleData?.mobile_number;
+                            // Only update if we found a non-null value
+                            if (freshPhone) {
+                                enrichedContract.buyer.phone = freshPhone;
+                            }
                         }
                     }
 
-                    // Refresh farmer profile phone - check all sources
-                    if (contract.farmer_id) {
+                    // Refresh farmer profile phone - check all sources, but don't overwrite if already present
+                    if (contract.farmer_id && contract.farmer) {
                         const { data: freshFarmer } = await (supabase as any)
                             .from("profiles")
                             .select(`
@@ -125,7 +130,11 @@ export async function getSupplyContracts(filters?: {
                             const farmerRoleData = Array.isArray(freshFarmer.farmer_profiles) ? freshFarmer.farmer_profiles[0] : freshFarmer.farmer_profiles;
                             const buyerRoleData = Array.isArray(freshFarmer.buyer_profiles) ? freshFarmer.buyer_profiles[0] : freshFarmer.buyer_profiles;
                             const equipmentRoleData = Array.isArray(freshFarmer.equipment_owner_profiles) ? freshFarmer.equipment_owner_profiles[0] : freshFarmer.equipment_owner_profiles;
-                            enrichedContract.farmer.phone = freshFarmer.phone || farmerRoleData?.mobile_number || buyerRoleData?.mobile_number || equipmentRoleData?.mobile_number;
+                            const freshPhone = freshFarmer.phone || farmerRoleData?.mobile_number || buyerRoleData?.mobile_number || equipmentRoleData?.mobile_number;
+                            // Only update if we found a non-null value
+                            if (freshPhone) {
+                                enrichedContract.farmer.phone = freshPhone;
+                            }
                         }
                     }
 

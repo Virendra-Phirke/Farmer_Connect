@@ -18,6 +18,9 @@ interface FarmListProps {
 }
 
 export const FarmsList = ({ profileId, farms, isLoading }: FarmListProps) => {
+    const SOIL_TYPE_OPTIONS = ["Alluvial", "Black", "Clay", "Laterite", "Loamy", "Red", "Sandy"];
+    const FARMING_TYPE_OPTIONS = ["Organic", "Traditional", "Mixed", "Natural", "Hydroponic", "Precision"];
+
     const [showAddDialog, setShowAddDialog] = useState(false);
     const [showEditDialog, setShowEditDialog] = useState(false);
     const [editingFarm, setEditingFarm] = useState<Farm | null>(null);
@@ -70,8 +73,20 @@ export const FarmsList = ({ profileId, farms, isLoading }: FarmListProps) => {
             toast.error("Farm name is required");
             return;
         }
-        if (!farmState || !farmDistrict || !farmSubDistrict) {
-            toast.error("State, district, and sub-district are required");
+        if (!farmState || !farmDistrict || !farmSubDistrict || !farmVillageCity) {
+            toast.error("State, district, sub-district and village/city are required");
+            return;
+        }
+        if (!farmSurveyNumber.trim() || !farmGatNumber.trim()) {
+            toast.error("Survey number and gat number are required");
+            return;
+        }
+        if (!farmLandSize.trim() || Number.isNaN(Number(farmLandSize)) || Number(farmLandSize) <= 0) {
+            toast.error("Valid land size is required");
+            return;
+        }
+        if (!farmSoilType || !farmFarmingType) {
+            toast.error("Soil type and farming type are required");
             return;
         }
 
@@ -83,12 +98,12 @@ export const FarmsList = ({ profileId, farms, isLoading }: FarmListProps) => {
                     state: farmState,
                     district: farmDistrict,
                     taluka: farmSubDistrict,
-                    village_city: farmVillageCity || undefined,
-                    survey_number: farmSurveyNumber || undefined,
-                    gat_number: farmGatNumber || undefined,
-                    land_size_acres: farmLandSize ? parseFloat(farmLandSize) : undefined,
-                    soil_type: farmSoilType || undefined,
-                    farming_type: farmFarmingType || undefined,
+                    village_city: farmVillageCity,
+                    survey_number: farmSurveyNumber,
+                    gat_number: farmGatNumber,
+                    land_size_acres: parseFloat(farmLandSize),
+                    soil_type: farmSoilType,
+                    farming_type: farmFarmingType,
                 },
             });
             toast.success("Farm added successfully");
@@ -112,8 +127,20 @@ export const FarmsList = ({ profileId, farms, isLoading }: FarmListProps) => {
             toast.error("Farm name is required");
             return;
         }
-        if (!farmState || !farmDistrict || !farmSubDistrict) {
-            toast.error("State, district, and sub-district are required");
+        if (!farmState || !farmDistrict || !farmSubDistrict || !farmVillageCity) {
+            toast.error("State, district, sub-district and village/city are required");
+            return;
+        }
+        if (!farmSurveyNumber.trim() || !farmGatNumber.trim()) {
+            toast.error("Survey number and gat number are required");
+            return;
+        }
+        if (!farmLandSize.trim() || Number.isNaN(Number(farmLandSize)) || Number(farmLandSize) <= 0) {
+            toast.error("Valid land size is required");
+            return;
+        }
+        if (!farmSoilType || !farmFarmingType) {
+            toast.error("Soil type and farming type are required");
             return;
         }
 
@@ -125,12 +152,12 @@ export const FarmsList = ({ profileId, farms, isLoading }: FarmListProps) => {
                     state: farmState,
                     district: farmDistrict,
                     taluka: farmSubDistrict,
-                    village_city: farmVillageCity || undefined,
-                    survey_number: farmSurveyNumber || undefined,
-                    gat_number: farmGatNumber || undefined,
-                    land_size_acres: farmLandSize ? parseFloat(farmLandSize) : undefined,
-                    soil_type: farmSoilType || undefined,
-                    farming_type: farmFarmingType || undefined,
+                    village_city: farmVillageCity,
+                    survey_number: farmSurveyNumber,
+                    gat_number: farmGatNumber,
+                    land_size_acres: parseFloat(farmLandSize),
+                    soil_type: farmSoilType,
+                    farming_type: farmFarmingType,
                 },
             });
 
@@ -317,7 +344,7 @@ export const FarmsList = ({ profileId, farms, isLoading }: FarmListProps) => {
                         </div>
 
                         <div className="space-y-2">
-                            <Label htmlFor="villageCity">Village / City</Label>
+                            <Label htmlFor="villageCity">Village / City <span className="text-red-500">*</span></Label>
                             <Select
                                 value={farmVillageCity}
                                 onValueChange={setFarmVillageCity}
@@ -340,7 +367,7 @@ export const FarmsList = ({ profileId, farms, isLoading }: FarmListProps) => {
                         </div>
 
                         <div className="space-y-2">
-                            <Label htmlFor="surveyNumber">Survey Number</Label>
+                            <Label htmlFor="surveyNumber">Survey Number <span className="text-red-500">*</span></Label>
                             <Input
                                 id="surveyNumber"
                                 value={farmSurveyNumber}
@@ -350,7 +377,7 @@ export const FarmsList = ({ profileId, farms, isLoading }: FarmListProps) => {
                         </div>
 
                         <div className="space-y-2">
-                            <Label htmlFor="gatNumber">Gat Number</Label>
+                            <Label htmlFor="gatNumber">Gat Number <span className="text-red-500">*</span></Label>
                             <Input
                                 id="gatNumber"
                                 value={farmGatNumber}
@@ -360,7 +387,7 @@ export const FarmsList = ({ profileId, farms, isLoading }: FarmListProps) => {
                         </div>
 
                         <div className="space-y-2">
-                            <Label htmlFor="landSize">Land Size (Acres)</Label>
+                            <Label htmlFor="landSize">Land Size (Acres) <span className="text-red-500">*</span></Label>
                             <Input
                                 id="landSize"
                                 type="number"
@@ -371,23 +398,31 @@ export const FarmsList = ({ profileId, farms, isLoading }: FarmListProps) => {
                         </div>
 
                         <div className="space-y-2">
-                            <Label htmlFor="soilType">Soil Type</Label>
-                            <Input
-                                id="soilType"
-                                value={farmSoilType}
-                                onChange={(e) => setFarmSoilType(e.target.value)}
-                                placeholder="e.g. Black soil, Clay"
-                            />
+                            <Label htmlFor="soilType">Soil Type <span className="text-red-500">*</span></Label>
+                            <Select value={farmSoilType} onValueChange={setFarmSoilType}>
+                                <SelectTrigger id="soilType">
+                                    <SelectValue placeholder="Select soil type" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {SOIL_TYPE_OPTIONS.map((option) => (
+                                        <SelectItem key={option} value={option}>{option}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
                         </div>
 
                         <div className="space-y-2">
-                            <Label htmlFor="farmingType">Farming Type</Label>
-                            <Input
-                                id="farmingType"
-                                value={farmFarmingType}
-                                onChange={(e) => setFarmFarmingType(e.target.value)}
-                                placeholder="e.g. Organic, Conventional"
-                            />
+                            <Label htmlFor="farmingType">Farming Type <span className="text-red-500">*</span></Label>
+                            <Select value={farmFarmingType} onValueChange={setFarmFarmingType}>
+                                <SelectTrigger id="farmingType">
+                                    <SelectValue placeholder="Select farming type" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {FARMING_TYPE_OPTIONS.map((option) => (
+                                        <SelectItem key={option} value={option}>{option}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
                         </div>
                     </div>
 
@@ -478,7 +513,7 @@ export const FarmsList = ({ profileId, farms, isLoading }: FarmListProps) => {
                         </div>
 
                         <div className="space-y-2">
-                            <Label htmlFor="editVillageCity">Village / City</Label>
+                            <Label htmlFor="editVillageCity">Village / City <span className="text-red-500">*</span></Label>
                             <Select
                                 value={farmVillageCity}
                                 onValueChange={setFarmVillageCity}
@@ -496,28 +531,46 @@ export const FarmsList = ({ profileId, farms, isLoading }: FarmListProps) => {
                         </div>
 
                         <div className="space-y-2">
-                            <Label htmlFor="editSurveyNumber">Survey Number</Label>
+                            <Label htmlFor="editSurveyNumber">Survey Number <span className="text-red-500">*</span></Label>
                             <Input id="editSurveyNumber" value={farmSurveyNumber} onChange={(e) => setFarmSurveyNumber(e.target.value)} />
                         </div>
 
                         <div className="space-y-2">
-                            <Label htmlFor="editGatNumber">Gat Number</Label>
+                            <Label htmlFor="editGatNumber">Gat Number <span className="text-red-500">*</span></Label>
                             <Input id="editGatNumber" value={farmGatNumber} onChange={(e) => setFarmGatNumber(e.target.value)} />
                         </div>
 
                         <div className="space-y-2">
-                            <Label htmlFor="editLandSize">Land Size (Acres)</Label>
+                            <Label htmlFor="editLandSize">Land Size (Acres) <span className="text-red-500">*</span></Label>
                             <Input id="editLandSize" type="number" value={farmLandSize} onChange={(e) => setFarmLandSize(e.target.value)} />
                         </div>
 
                         <div className="space-y-2">
-                            <Label htmlFor="editSoilType">Soil Type</Label>
-                            <Input id="editSoilType" value={farmSoilType} onChange={(e) => setFarmSoilType(e.target.value)} />
+                            <Label htmlFor="editSoilType">Soil Type <span className="text-red-500">*</span></Label>
+                            <Select value={farmSoilType} onValueChange={setFarmSoilType}>
+                                <SelectTrigger id="editSoilType">
+                                    <SelectValue placeholder="Select soil type" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {SOIL_TYPE_OPTIONS.map((option) => (
+                                        <SelectItem key={option} value={option}>{option}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
                         </div>
 
                         <div className="space-y-2">
-                            <Label htmlFor="editFarmingType">Farming Type</Label>
-                            <Input id="editFarmingType" value={farmFarmingType} onChange={(e) => setFarmFarmingType(e.target.value)} />
+                            <Label htmlFor="editFarmingType">Farming Type <span className="text-red-500">*</span></Label>
+                            <Select value={farmFarmingType} onValueChange={setFarmFarmingType}>
+                                <SelectTrigger id="editFarmingType">
+                                    <SelectValue placeholder="Select farming type" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {FARMING_TYPE_OPTIONS.map((option) => (
+                                        <SelectItem key={option} value={option}>{option}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
                         </div>
                     </div>
 

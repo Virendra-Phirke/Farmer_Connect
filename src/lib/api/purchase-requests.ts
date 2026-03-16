@@ -86,14 +86,15 @@ export async function getPurchaseRequests(filters?: {
     }
 
     // Enrich with latest profile data to ensure fresh phone numbers
+    // IMPORTANT: Only enriches display data, never modifies database
     if (data && data.length > 0) {
         try {
             const enrichedData = await Promise.all(
                 data.map(async (request: any) => {
                     const enrichedRequest = { ...request };
 
-                    // Refresh buyer profile phone - check all sources
-                    if (request.buyer_id) {
+                    // Refresh buyer profile phone - check all sources, but don't overwrite if already present
+                    if (request.buyer_id && request.buyer) {
                         const { data: freshBuyer } = await (supabase as any)
                             .from("profiles")
                             .select(`
@@ -106,12 +107,16 @@ export async function getPurchaseRequests(filters?: {
                         if (freshBuyer && enrichedRequest.buyer) {
                             const buyerRoleData = Array.isArray(freshBuyer.buyer_profiles) ? freshBuyer.buyer_profiles[0] : freshBuyer.buyer_profiles;
                             const equipmentRoleData = Array.isArray(freshBuyer.equipment_owner_profiles) ? freshBuyer.equipment_owner_profiles[0] : freshBuyer.equipment_owner_profiles;
-                            enrichedRequest.buyer.phone = freshBuyer.phone || buyerRoleData?.mobile_number || equipmentRoleData?.mobile_number;
+                            const freshPhone = freshBuyer.phone || buyerRoleData?.mobile_number || equipmentRoleData?.mobile_number;
+                            // Only update if we found a non-null value
+                            if (freshPhone) {
+                                enrichedRequest.buyer.phone = freshPhone;
+                            }
                         }
                     }
 
-                    // Refresh farmer profile phone - check all sources
-                    if (request.crop_listing?.farmer?.id) {
+                    // Refresh farmer profile phone - check all sources, but don't overwrite if already present
+                    if (request.crop_listing?.farmer?.id && request.crop_listing?.farmer) {
                         const { data: freshFarmer } = await (supabase as any)
                             .from("profiles")
                             .select(`
@@ -126,7 +131,11 @@ export async function getPurchaseRequests(filters?: {
                             const farmerRoleData = Array.isArray(freshFarmer.farmer_profiles) ? freshFarmer.farmer_profiles[0] : freshFarmer.farmer_profiles;
                             const buyerRoleData = Array.isArray(freshFarmer.buyer_profiles) ? freshFarmer.buyer_profiles[0] : freshFarmer.buyer_profiles;
                             const equipmentRoleData = Array.isArray(freshFarmer.equipment_owner_profiles) ? freshFarmer.equipment_owner_profiles[0] : freshFarmer.equipment_owner_profiles;
-                            enrichedRequest.crop_listing.farmer.phone = freshFarmer.phone || farmerRoleData?.mobile_number || buyerRoleData?.mobile_number || equipmentRoleData?.mobile_number;
+                            const freshPhone = freshFarmer.phone || farmerRoleData?.mobile_number || buyerRoleData?.mobile_number || equipmentRoleData?.mobile_number;
+                            // Only update if we found a non-null value
+                            if (freshPhone) {
+                                enrichedRequest.crop_listing.farmer.phone = freshPhone;
+                            }
                         }
                     }
 
@@ -241,7 +250,7 @@ export async function updatePurchaseRequest(
             console.error(`[Purchase Request Update - Attempt ${attempt} FAILED]`, {
                 id,
                 code: result.error.code,
-                status: result.error.status,
+                status: (result.error as any).status,
                 message: result.error.message,
                 details: result.error.details,
                 hint: result.error.hint,
@@ -284,7 +293,7 @@ export async function updatePurchaseRequest(
     const shouldTrySafePayload =
         Object.keys(fallbackPayload).length !== Object.keys(firstPayload).length ||
         result.error.code === "PGRST204" ||
-        result.error.status === 400;
+        (result.error as any).status === 400;
 
     if (shouldTrySafePayload) {
         const { payment_status, billing_id, updated_at, ...safeCore } = baseUpdates as any;
@@ -318,7 +327,7 @@ export async function updatePurchaseRequest(
         id,
         attemptedUpdates: updates,
         code: result.error?.code,
-        status: result.error?.status,
+        status: (result.error as any)?.status,
         message: result.error?.message,
         details: result.error?.details,
         hint: result.error?.hint,

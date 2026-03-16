@@ -364,14 +364,16 @@ export async function updateUserProfile(
 ) {
   // 1. Update the base 'profiles' table with only explicitly provided fields
   const baseUpdates: any = { updated_at: new Date().toISOString() };
-  if (updates.full_name !== undefined) baseUpdates.full_name = updates.full_name;
-  if (updates.phone !== undefined) baseUpdates.phone = updates.phone;
-  if (updates.location !== undefined) baseUpdates.location = updates.location;
-  if (updates.state !== undefined) baseUpdates.state = updates.state;
-  if (updates.district !== undefined) baseUpdates.district = updates.district;
-  if (updates.taluka !== undefined) baseUpdates.taluka = updates.taluka;
-  if (updates.village_city !== undefined) baseUpdates.village_city = updates.village_city;
-  if (updates.landmark !== undefined) baseUpdates.landmark = updates.landmark;
+  
+  // SAFETY: Only update if field is actually provided AND not null/undefined
+  if (updates.full_name !== undefined && updates.full_name !== null) baseUpdates.full_name = updates.full_name;
+  if (updates.phone !== undefined && updates.phone !== null) baseUpdates.phone = updates.phone;
+  if (updates.location !== undefined && updates.location !== null) baseUpdates.location = updates.location;
+  if (updates.state !== undefined && updates.state !== null) baseUpdates.state = updates.state;
+  if (updates.district !== undefined && updates.district !== null) baseUpdates.district = updates.district;
+  if (updates.taluka !== undefined && updates.taluka !== null) baseUpdates.taluka = updates.taluka;
+  if (updates.village_city !== undefined && updates.village_city !== null) baseUpdates.village_city = updates.village_city;
+  if (updates.landmark !== undefined && updates.landmark !== null) baseUpdates.landmark = updates.landmark;
 
   let profileId = await getProfileId(clerkUserId);
 
@@ -391,13 +393,16 @@ export async function updateUserProfile(
 
     profileId = inserted.id;
   } else {
-    const { error: baseError } = await supabase
-      .from("profiles")
-      .update(baseUpdates)
-      .eq("id", profileId);
+    // Only update if there are fields to update (beyond timestamp)
+    if (Object.keys(baseUpdates).length > 1) {
+      const { error: baseError } = await supabase
+        .from("profiles")
+        .update(baseUpdates)
+        .eq("id", profileId);
 
-    if (baseError) {
-      throw baseError;
+      if (baseError) {
+        throw baseError;
+      }
     }
   }
 
@@ -409,36 +414,40 @@ export async function updateUserProfile(
       profile_id: profileId,
       updated_at: new Date().toISOString(),
     };
-    if (updates.land_size_acres !== undefined) farmerUpdates.land_size_acres = updates.land_size_acres;
-    if (updates.soil_type !== undefined) farmerUpdates.soil_type = updates.soil_type;
-    if (updates.farming_type !== undefined) farmerUpdates.farming_type = updates.farming_type;
-    if (updates.available_equipment !== undefined) farmerUpdates.available_equipment = updates.available_equipment;
-    if (updates.state !== undefined) farmerUpdates.state = updates.state;
-    if (updates.district !== undefined) farmerUpdates.district = updates.district;
-    if (updates.taluka !== undefined) farmerUpdates.taluka = updates.taluka;
-    if (updates.village_city !== undefined) farmerUpdates.village_city = updates.village_city;
-    if (updates.survey_number !== undefined) farmerUpdates.survey_number = updates.survey_number;
-    if (updates.gat_number !== undefined) farmerUpdates.gat_number = updates.gat_number;
+    if (updates.land_size_acres !== undefined && updates.land_size_acres !== null) farmerUpdates.land_size_acres = updates.land_size_acres;
+    if (updates.soil_type !== undefined && updates.soil_type !== null) farmerUpdates.soil_type = updates.soil_type;
+    if (updates.farming_type !== undefined && updates.farming_type !== null) farmerUpdates.farming_type = updates.farming_type;
+    if (updates.available_equipment !== undefined && updates.available_equipment !== null) farmerUpdates.available_equipment = updates.available_equipment;
+    if (updates.state !== undefined && updates.state !== null) farmerUpdates.state = updates.state;
+    if (updates.district !== undefined && updates.district !== null) farmerUpdates.district = updates.district;
+    if (updates.taluka !== undefined && updates.taluka !== null) farmerUpdates.taluka = updates.taluka;
+    if (updates.village_city !== undefined && updates.village_city !== null) farmerUpdates.village_city = updates.village_city;
+    if (updates.survey_number !== undefined && updates.survey_number !== null) farmerUpdates.survey_number = updates.survey_number;
+    if (updates.gat_number !== undefined && updates.gat_number !== null) farmerUpdates.gat_number = updates.gat_number;
 
-    await (supabase as any).from("farmer_profiles").upsert(farmerUpdates, { onConflict: "profile_id" });
+    if (Object.keys(farmerUpdates).length > 2) { // More than just profile_id and updated_at
+      await (supabase as any).from("farmer_profiles").upsert(farmerUpdates, { onConflict: "profile_id" });
+    }
   } else if (role === "equipment_owner") {
     const equipmentOwnerUpdates: any = {
       profile_id: profileId,
       updated_at: new Date().toISOString(),
     };
-    if (updates.available_equipment !== undefined) equipmentOwnerUpdates.available_equipment = updates.available_equipment;
-    if (updates.phone !== undefined) equipmentOwnerUpdates.mobile_number = updates.phone;
+    if (updates.available_equipment !== undefined && updates.available_equipment !== null) equipmentOwnerUpdates.available_equipment = updates.available_equipment;
+    if (updates.phone !== undefined && updates.phone !== null) equipmentOwnerUpdates.mobile_number = updates.phone;
 
-    const { error: upsertError } = await (supabase as any).from("equipment_owner_profiles").upsert(equipmentOwnerUpdates, { onConflict: "profile_id" });
-    if (upsertError && isMissingColumnError(upsertError, "mobile_number")) {
-      const fallbackPayload: any = {
-        profile_id: profileId,
-        updated_at: new Date().toISOString(),
-      };
-      if (updates.available_equipment !== undefined) fallbackPayload.available_equipment = updates.available_equipment;
-      await (supabase as any).from("equipment_owner_profiles").upsert(fallbackPayload, { onConflict: "profile_id" });
-    } else if (upsertError) {
-      throw upsertError;
+    if (Object.keys(equipmentOwnerUpdates).length > 2) { // More than just profile_id and updated_at
+      const { error: upsertError } = await (supabase as any).from("equipment_owner_profiles").upsert(equipmentOwnerUpdates, { onConflict: "profile_id" });
+      if (upsertError && isMissingColumnError(upsertError, "mobile_number")) {
+        const fallbackPayload: any = {
+          profile_id: profileId,
+          updated_at: new Date().toISOString(),
+        };
+        if (updates.available_equipment !== undefined && updates.available_equipment !== null) fallbackPayload.available_equipment = updates.available_equipment;
+        await (supabase as any).from("equipment_owner_profiles").upsert(fallbackPayload, { onConflict: "profile_id" });
+      } else if (upsertError) {
+        throw upsertError;
+      }
     }
   } else if (role === "hotel_restaurant_manager") {
     const buyerUpdates: any = {
@@ -446,16 +455,15 @@ export async function updateUserProfile(
       updated_at: new Date().toISOString(),
     };
 
-    if (updates.phone !== undefined) buyerUpdates.mobile_number = updates.phone;
+    if (updates.phone !== undefined && updates.phone !== null) buyerUpdates.mobile_number = updates.phone;
 
-    const { error: upsertError } = await (supabase as any).from("buyer_profiles").upsert(buyerUpdates, { onConflict: "profile_id" });
-    if (upsertError && isMissingColumnError(upsertError, "mobile_number")) {
-      await (supabase as any).from("buyer_profiles").upsert({
-        profile_id: profileId,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: "profile_id" });
-    } else if (upsertError) {
-      throw upsertError;
+    if (Object.keys(buyerUpdates).length > 2) { // More than just profile_id and updated_at
+      const { error: upsertError } = await (supabase as any).from("buyer_profiles").upsert(buyerUpdates, { onConflict: "profile_id" });
+      if (upsertError && isMissingColumnError(upsertError, "mobile_number")) {
+        // Don't update if we can't set the field properly
+      } else if (upsertError) {
+        throw upsertError;
+      }
     }
   }
 
