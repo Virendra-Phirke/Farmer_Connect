@@ -8,11 +8,13 @@ import DashboardLayout from "@/components/DashboardLayout";
 import { Loader2, FileText, Receipt } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { BillReceiptDialog } from "@/components/BillReceiptDialog";
+import { SearchBar } from "@/components/SearchBar";
 import { toast } from "sonner";
 
 const MyContractsPage = () => {
     const { user } = useUser();
     const [profileId, setProfileId] = useState<string | null>(null);
+    const [searchQuery, setSearchQuery] = useState("");
 
     const [isBillOpen, setIsBillOpen] = useState(false);
     const [selectedBill, setSelectedBill] = useState<any>(null);
@@ -31,6 +33,18 @@ const MyContractsPage = () => {
         { enabled: !!profileId }
     );
     const billingReadyRentals = rentalBookings?.filter((booking: any) => booking.status === "confirmed" || booking.status === "completed") || [];
+
+    // Filter contracts by search query
+    const filteredContracts = contracts?.filter((c: any) =>
+        c.crop_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        c.buyer?.full_name?.toLowerCase().includes(searchQuery.toLowerCase())
+    ) || [];
+
+    // Filter rentals by search query
+    const filteredRentals = billingReadyRentals?.filter((rental: any) =>
+        rental.equipment?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        rental.owner?.full_name?.toLowerCase().includes(searchQuery.toLowerCase())
+    ) || [];
 
     const openBill = (contract: any) => {
         const amount = Number(contract.total_amount ?? (Number(contract.price_per_kg || 0) * Number(contract.quantity_kg_per_delivery || 0)));
@@ -168,13 +182,20 @@ const MyContractsPage = () => {
             <div className="space-y-6">
                 <h2 className="text-xl font-bold flex items-center gap-2"><FileText className="h-6 w-6" /> My Supply Contracts</h2>
 
+                <SearchBar 
+                    placeholder="Search by crop name or buyer..." 
+                    onSearch={setSearchQuery} 
+                />
+
                 {!profileId || isLoading ? (
                     <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
                 ) : !contracts?.length ? (
                     <div className="bg-card rounded-xl border border-border p-12 text-center text-muted-foreground">No supply contracts active. When buyers create contracts with you, they'll appear here.</div>
+                ) : !filteredContracts?.length ? (
+                    <div className="bg-card rounded-xl border border-border p-12 text-center text-muted-foreground">No contracts match your search.</div>
                 ) : (
                     <div className="space-y-4">
-                        {contracts.map((c: any) => (
+                        {filteredContracts.map((c: any) => (
                             <div key={c.id} className="bg-card rounded-xl border border-border p-4 sm:p-6">
                                 <div className="flex justify-between items-start mb-2">
                                     <h3 className="font-semibold text-lg">{c.crop_name}</h3>

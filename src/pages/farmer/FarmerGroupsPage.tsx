@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchBar } from "@/components/SearchBar";
 // @ts-expect-error - The package's index.d.ts is malformed and not a module
 import data from "data-for-india";
 
@@ -26,6 +27,7 @@ const FarmerGroupsPage = () => {
     const [isCreateOpen, setIsCreateOpen] = useState(false);
     const [newGroup, setNewGroup] = useState<Partial<FarmerGroupInsert>>({});
     const [groupToLeave, setGroupToLeave] = useState<string | null>(null);
+    const [searchQuery, setSearchQuery] = useState("");
 
     useEffect(() => {
         if (user?.id) getProfileId(user.id).then(setProfileId);
@@ -39,6 +41,13 @@ const FarmerGroupsPage = () => {
     const createGroupMutation = useCreateFarmerGroup();
     const deleteGroupMutation = useDeleteFarmerGroup();
     const requestJoinMutation = useRequestToJoinFarmerGroup();
+
+    // Filter groups by search query
+    const filteredGroups = groups?.filter((group: any) =>
+        group.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        group.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        group.region?.toLowerCase().includes(searchQuery.toLowerCase())
+    ) || [];
 
     const availableDistricts = data.districts
         .filter((d: any) => d.state === newGroup.state)
@@ -160,13 +169,20 @@ const FarmerGroupsPage = () => {
                     </Dialog>
                 </div>
 
+                <SearchBar 
+                    placeholder="Search by group name or location..." 
+                    onSearch={setSearchQuery} 
+                />
+
                 {isLoading ? (
                     <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
                 ) : !groups?.length ? (
                     <div className="bg-card rounded-xl border border-border p-12 text-center text-muted-foreground">No farmer groups available yet.</div>
+                ) : !filteredGroups?.length ? (
+                    <div className="bg-card rounded-xl border border-border p-12 text-center text-muted-foreground">No groups match your search.</div>
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        {groups.map((group: any) => {
+                        {filteredGroups.map((group: any) => {
                             const isMember = group.farmer_group_members?.some((m: any) => m.profile_id === profileId);
                             const hasRequested = group.requests?.some((r: any) => r.profile_id === profileId && r.status === 'pending');
                             const locationStr = [group.village, group.taluka, group.district, group.state].filter(Boolean).join(", ") || group.region;

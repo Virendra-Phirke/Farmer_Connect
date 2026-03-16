@@ -7,6 +7,7 @@ import { Loader2, FileText, Check, X, Clock, Receipt } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { SearchBar } from "@/components/SearchBar";
 import { BillReceiptDialog } from "@/components/BillReceiptDialog";
 
 const SupplyContractsPage = () => {
@@ -14,6 +15,7 @@ const SupplyContractsPage = () => {
     const [profileId, setProfileId] = useState<string | null>(null);
     const [isBillOpen, setIsBillOpen] = useState(false);
     const [selectedContract, setSelectedContract] = useState<any>(null);
+    const [searchQuery, setSearchQuery] = useState("");
 
     useEffect(() => {
         if (user?.id) getProfileId(user.id).then(setProfileId);
@@ -32,6 +34,23 @@ const SupplyContractsPage = () => {
     const historyContracts = useMemo(
         () => contracts?.filter((c: any) => c.status !== "pending") || [],
         [contracts]
+    );
+
+    // Filter by search query
+    const filteredPendingContracts = useMemo(
+        () => pendingContracts.filter((c: any) =>
+            c.crop_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            c.farmer?.full_name?.toLowerCase().includes(searchQuery.toLowerCase())
+        ),
+        [pendingContracts, searchQuery]
+    );
+
+    const filteredHistoryContracts = useMemo(
+        () => historyContracts.filter((c: any) =>
+            c.crop_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            c.farmer?.full_name?.toLowerCase().includes(searchQuery.toLowerCase())
+        ),
+        [historyContracts, searchQuery]
     );
 
     const showBill = (contract: any) => {
@@ -121,6 +140,11 @@ const SupplyContractsPage = () => {
             <div className="space-y-6">
                 <h2 className="text-xl font-bold flex items-center gap-2"><FileText className="h-6 w-6" /> Supply Contracts</h2>
 
+                <SearchBar 
+                    placeholder="Search by crop name or farmer..." 
+                    onSearch={setSearchQuery} 
+                />
+
                 {isLoading ? (
                     <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
                 ) : (
@@ -133,9 +157,11 @@ const SupplyContractsPage = () => {
                         <TabsContent value="pending">
                             {!pendingContracts.length ? (
                                 <div className="bg-card rounded-xl border border-border p-12 text-center text-muted-foreground">No pending supply contract proposals.</div>
+                            ) : !filteredPendingContracts.length ? (
+                                <div className="bg-card rounded-xl border border-border p-12 text-center text-muted-foreground">No pending contracts match your search.</div>
                             ) : (
                                 <div className="space-y-4">
-                                    {pendingContracts.map((contract: any) => (
+                                    {filteredPendingContracts.map((contract: any) => (
                                         <div key={contract.id} className="bg-card rounded-xl border border-border p-4 sm:p-6 flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4">
                                             <div>
                                                 <p className="font-semibold text-lg">{contract.crop_name} <span className="text-muted-foreground font-normal text-sm">from {contract.farmer?.full_name || "Unknown Farmer"}</span></p>
@@ -159,9 +185,11 @@ const SupplyContractsPage = () => {
                         <TabsContent value="history">
                             {!historyContracts.length ? (
                                 <div className="bg-card rounded-xl border border-border p-12 text-center text-muted-foreground">No supply contract history found.</div>
+                            ) : !filteredHistoryContracts.length ? (
+                                <div className="bg-card rounded-xl border border-border p-12 text-center text-muted-foreground">No history contracts match your search.</div>
                             ) : (
                                 <div className="space-y-4">
-                                    {historyContracts.map((contract: any) => (
+                                    {filteredHistoryContracts.map((contract: any) => (
                                         <div key={contract.id} className="bg-card border border-border p-4 sm:p-6 flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4 opacity-80">
                                             <div>
                                                 <p className="font-semibold text-lg">{contract.crop_name} <span className="text-muted-foreground font-normal text-sm">from {contract.farmer?.full_name || "Unknown Farmer"}</span></p>

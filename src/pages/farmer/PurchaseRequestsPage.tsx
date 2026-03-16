@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Loader2, ShoppingCart, Check, X, FileText } from "lucide-react";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { SearchBar } from "@/components/SearchBar";
 import BillReceiptDialog from "@/components/BillReceiptDialog";
 
 const PurchaseRequestsPage = () => {
@@ -14,6 +15,7 @@ const PurchaseRequestsPage = () => {
     const [profileId, setProfileId] = useState<string | null>(null);
     const [selectedBill, setSelectedBill] = useState<any>(null);
     const [isBillOpen, setIsBillOpen] = useState(false);
+    const [searchQuery, setSearchQuery] = useState("");
 
     useEffect(() => {
         if (user?.id) getProfileId(user.id).then(setProfileId);
@@ -30,6 +32,23 @@ const PurchaseRequestsPage = () => {
     const historyRequests = useMemo(
         () => requests?.filter((req: any) => req.status !== "pending") || [],
         [requests]
+    );
+
+    // Filter by search query
+    const filteredPendingRequests = useMemo(
+        () => pendingRequests.filter((req: any) =>
+            req.crop_listing?.crop_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            req.buyer?.full_name?.toLowerCase().includes(searchQuery.toLowerCase())
+        ),
+        [pendingRequests, searchQuery]
+    );
+
+    const filteredHistoryRequests = useMemo(
+        () => historyRequests.filter((req: any) =>
+            req.crop_listing?.crop_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            req.buyer?.full_name?.toLowerCase().includes(searchQuery.toLowerCase())
+        ),
+        [historyRequests, searchQuery]
     );
 
     const handleAccept = (req: any) => {
@@ -156,6 +175,11 @@ const PurchaseRequestsPage = () => {
             <div className="space-y-6">
                 <h2 className="text-xl font-bold flex items-center gap-2"><ShoppingCart className="h-6 w-6" /> Purchase Requests</h2>
 
+                <SearchBar 
+                    placeholder="Search by crop name or buyer..." 
+                    onSearch={setSearchQuery} 
+                />
+
                 {isLoading ? (
                     <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
                 ) : (
@@ -168,9 +192,11 @@ const PurchaseRequestsPage = () => {
                         <TabsContent value="pending">
                             {!pendingRequests.length ? (
                                 <div className="bg-card rounded-xl border border-border p-12 text-center text-muted-foreground">No pending purchase requests.</div>
+                            ) : !filteredPendingRequests.length ? (
+                                <div className="bg-card rounded-xl border border-border p-12 text-center text-muted-foreground">No pending requests match your search.</div>
                             ) : (
                                 <div className="space-y-4">
-                                    {pendingRequests.map((req: any) => (
+                                    {filteredPendingRequests.map((req: any) => (
                                         <div key={req.id} className="bg-card rounded-xl border border-border p-4 sm:p-6 flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4">
                                             <div>
                                                 <p className="font-semibold">Item: {req.crop_listing?.crop_name || "Crop"}</p>
@@ -192,9 +218,11 @@ const PurchaseRequestsPage = () => {
                         <TabsContent value="history">
                             {!historyRequests.length ? (
                                 <div className="bg-card rounded-xl border border-border p-12 text-center text-muted-foreground">No purchase history found.</div>
+                            ) : !filteredHistoryRequests.length ? (
+                                <div className="bg-card rounded-xl border border-border p-12 text-center text-muted-foreground">No history requests match your search.</div>
                             ) : (
                                 <div className="space-y-4">
-                                    {historyRequests.map((req: any) => (
+                                    {filteredHistoryRequests.map((req: any) => (
                                         <div key={req.id} className="bg-card border border-border p-4 sm:p-6 flex flex-col sm:flex-row justify-between gap-3 sm:gap-4">
                                             <div>
                                                 <div className="flex items-center gap-2 mb-1">

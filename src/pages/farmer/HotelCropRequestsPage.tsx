@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import { getProfileId } from "@/lib/supabase-auth";
 import { Loader2, ArrowRight, CheckCircle } from "lucide-react";
 import { toast } from "sonner";
+import { SearchBar } from "@/components/SearchBar";
 
 export default function HotelCropRequestsPage() {
     const { user } = useUser();
@@ -16,6 +17,7 @@ export default function HotelCropRequestsPage() {
     const [selectedReq, setSelectedReq] = useState<any>(null);
     const [proposedPrice, setProposedPrice] = useState("");
     const [confirmedProposal, setConfirmedProposal] = useState<any>(null);
+    const [searchQuery, setSearchQuery] = useState("");
 
     useEffect(() => {
         if (user?.id) {
@@ -25,6 +27,13 @@ export default function HotelCropRequestsPage() {
 
     const { data: requirements, isLoading } = useOpenCropRequirements();
     const createContract = useCreateSupplyContract();
+
+    // Filter by search query
+    const filteredRequirements = requirements?.filter((req: any) =>
+        req.crop_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        req.hotel?.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        req.hotel?.location?.toLowerCase().includes(searchQuery.toLowerCase())
+    ) || [];
 
     const handleFulfill = () => {
         if (!profileId || !selectedReq || !proposedPrice) {
@@ -77,17 +86,27 @@ export default function HotelCropRequestsPage() {
 
     return (
         <DashboardLayout subtitle="Fulfill crop demands directly from local hotels and restaurants">
-            {isLoading ? (
-                <div className="flex justify-center p-12">
-                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                </div>
-            ) : requirements?.length === 0 ? (
-                <div className="text-center p-12 bg-card rounded-xl border border-border text-muted-foreground">
-                    There are currently no open crop requirements from hotels. Check back later!
-                </div>
-            ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {requirements?.map(req => (
+            <div className="space-y-6">
+                <SearchBar 
+                    placeholder="Search by crop name or hotel..." 
+                    onSearch={setSearchQuery} 
+                />
+                
+                {isLoading ? (
+                    <div className="flex justify-center p-12">
+                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                    </div>
+                ) : requirements?.length === 0 ? (
+                    <div className="text-center p-12 bg-card rounded-xl border border-border text-muted-foreground">
+                        There are currently no open crop requirements from hotels. Check back later!
+                    </div>
+                ) : !filteredRequirements?.length ? (
+                    <div className="text-center p-12 bg-card rounded-xl border border-border text-muted-foreground">
+                        No crop requirements match your search. Try adjusting your filters.
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {filteredRequirements?.map(req => (
                         <div key={req.id} className="bg-card border border-border rounded-xl p-6 flex flex-col justify-between">
                             <div>
                                 <div className="flex justify-between items-start mb-2">
@@ -123,6 +142,7 @@ export default function HotelCropRequestsPage() {
                     ))}
                 </div>
             )}
+            </div>
 
             {/* Price Proposal Dialog */}
             <Dialog open={!!selectedReq} onOpenChange={(open) => !open && (setSelectedReq(null), setProposedPrice(""))}>

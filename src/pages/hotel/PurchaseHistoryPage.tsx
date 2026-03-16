@@ -5,6 +5,7 @@ import { usePurchaseRequests } from "@/hooks/usePurchaseRequests";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Loader2, ShoppingCart, Check, X, Clock, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SearchBar } from "@/components/SearchBar";
 import { BillReceiptDialog } from "@/components/BillReceiptDialog";
 
 const PurchaseHistoryPage = () => {
@@ -12,6 +13,7 @@ const PurchaseHistoryPage = () => {
     const [profileId, setProfileId] = useState<string | null>(null);
     const [isBillOpen, setIsBillOpen] = useState(false);
     const [selectedRequest, setSelectedRequest] = useState<any>(null);
+    const [searchQuery, setSearchQuery] = useState("");
 
     const showBill = (req: any) => {
         const cropName = req.crop_listing?.crop_name || "Crop";
@@ -80,6 +82,12 @@ const PurchaseHistoryPage = () => {
         { enabled: !!profileId }
     );
 
+    // Filter by search query
+    const filteredRequests = requests?.filter((req: any) =>
+        req.crop_listing?.crop_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        req.crop_listing?.farmer?.full_name?.toLowerCase().includes(searchQuery.toLowerCase())
+    ) || [];
+
     const getStatusBadge = (status: string) => {
         switch (status) {
             case "accepted": return <span className="inline-flex items-center gap-1 text-green-600 bg-green-50 px-2 py-1 rounded-md text-sm font-medium"><Check className="h-4 w-4" /> Accepted</span>;
@@ -95,13 +103,20 @@ const PurchaseHistoryPage = () => {
             <div className="space-y-6">
                 <h2 className="text-xl font-bold flex items-center gap-2"><ShoppingCart className="h-6 w-6" /> Purchase History</h2>
 
+                <SearchBar 
+                    placeholder="Search by crop name or farmer..." 
+                    onSearch={setSearchQuery} 
+                />
+
                 {isLoading ? (
                     <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
                 ) : !requests?.length ? (
                     <div className="bg-card rounded-xl border border-border p-12 text-center text-muted-foreground">You haven't requested to buy any produce yet.</div>
+                ) : !filteredRequests?.length ? (
+                    <div className="bg-card rounded-xl border border-border p-12 text-center text-muted-foreground">No purchases match your search.</div>
                 ) : (
                     <div className="space-y-4">
-                        {requests.map((req: any) => (
+                        {filteredRequests.map((req: any) => (
                             <div key={req.id} className="bg-card rounded-xl border border-border p-4 sm:p-6 flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4">
                                 <div>
                                     <div className="flex items-center gap-2 mb-1">

@@ -6,6 +6,7 @@ import { getEquipmentPaymentStatus } from "@/lib/api/equipment-bookings";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Loader2, Users, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SearchBar } from "@/components/SearchBar";
 import { BillReceiptDialog } from "@/components/BillReceiptDialog";
 import { toast } from "sonner";
 
@@ -14,6 +15,7 @@ const BookingCalendarPage = () => {
     const [profileId, setProfileId] = useState<string | null>(null);
     const [isBillOpen, setIsBillOpen] = useState(false);
     const [selectedBooking, setSelectedBooking] = useState<any>(null);
+    const [searchQuery, setSearchQuery] = useState("");
 
     useEffect(() => {
         if (user?.id) getProfileId(user.id).then(setProfileId);
@@ -22,6 +24,12 @@ const BookingCalendarPage = () => {
     const { data: bookings, isLoading } = useOwnerBookings(profileId || "");
     const updateMutation = useUpdateEquipmentBooking();
     const confirmedBookings = bookings?.filter((b: any) => b.status === "confirmed" || b.status === "completed") || [];
+
+    // Filter by search query
+    const filteredBookings = confirmedBookings.filter((booking: any) =>
+        booking.equipment?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        booking.renter?.full_name?.toLowerCase().includes(searchQuery.toLowerCase())
+    );
 
     const showBill = (booking: any) => {
         const amount = Number(booking.total_price || 0);
@@ -95,13 +103,20 @@ const BookingCalendarPage = () => {
             <div className="space-y-6">
                 <h2 className="text-xl font-bold flex items-center gap-2"><Users className="h-6 w-6" /> My Renters</h2>
 
+                <SearchBar 
+                    placeholder="Search by equipment name or renter..." 
+                    onSearch={setSearchQuery} 
+                />
+
                 {isLoading ? (
                     <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
                 ) : !confirmedBookings.length ? (
                     <div className="bg-card rounded-xl border border-border p-12 text-center text-muted-foreground">No confirmed bookings yet.</div>
+                ) : !filteredBookings.length ? (
+                    <div className="bg-card rounded-xl border border-border p-12 text-center text-muted-foreground">No bookings match your search.</div>
                 ) : (
                     <div className="space-y-4">
-                        {confirmedBookings.map((booking: any) => (
+                        {filteredBookings.map((booking: any) => (
                             <div key={booking.id} className="bg-card rounded-xl border border-border p-6">
                                 <div className="flex justify-between items-start">
                                     <div>

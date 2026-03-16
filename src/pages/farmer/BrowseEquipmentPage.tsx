@@ -6,6 +6,7 @@ import { getProfileId, getUserProfile, updateUserProfile } from "@/lib/supabase-
 import DashboardLayout from "@/components/DashboardLayout";
 import { Loader2, Tractor, MapPin, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SearchBar } from "@/components/SearchBar";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -15,6 +16,7 @@ import { differenceInDays, parseISO } from "date-fns";
 const BrowseEquipmentPage = () => {
     const { user } = useUser();
     const [profileId, setProfileId] = useState<string | null>(null);
+    const [searchQuery, setSearchQuery] = useState("");
 
     useEffect(() => {
         if (user?.id) {
@@ -27,6 +29,13 @@ const BrowseEquipmentPage = () => {
 
     // Filter out equipment with 0 quantity - show equipment even if previously rented until unavailable
     const availableEquipment = equipment?.filter((item: any) => item.quantity > 0) || [];
+    
+    // Filter by search query
+    const filteredEquipment = availableEquipment.filter((item: any) =>
+        item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.owner?.full_name?.toLowerCase().includes(searchQuery.toLowerCase())
+    );
 
     const [selectedEquipment, setSelectedEquipment] = useState<any | null>(null);
     const [guideEquipment, setGuideEquipment] = useState<any | null>(null);
@@ -121,15 +130,24 @@ const BrowseEquipmentPage = () => {
     return (
         <DashboardLayout subtitle="Browse available agricultural equipment for rent.">
             <div className="space-y-6">
-                <h2 className="text-xl font-bold">Available Equipment</h2>
+                <div className="flex justify-between items-center">
+                    <h2 className="text-xl font-bold">Available Equipment</h2>
+                </div>
+                
+                <SearchBar 
+                    placeholder="Search by equipment name, category, or owner..." 
+                    onSearch={setSearchQuery} 
+                />
 
                 {isLoading ? (
                     <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
                 ) : !availableEquipment?.length ? (
                     <div className="bg-card rounded-xl border border-border p-12 text-center text-muted-foreground">No equipment available right now. Check back later!</div>
+                ) : !filteredEquipment?.length ? (
+                    <div className="bg-card rounded-xl border border-border p-12 text-center text-muted-foreground">No equipment matches your search. Try adjusting your filters.</div>
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {availableEquipment.map((item: any) => {
+                        {filteredEquipment.map((item: any) => {
                             const isLowStock = item.quantity <= 2;
                             return (
                             <div key={item.id} className={`bg-card rounded-xl border ${isLowStock ? 'border-orange-300' : 'border-border'} p-6 hover:shadow-md transition-shadow relative`}>

@@ -10,6 +10,7 @@ import DashboardLayout from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Loader2, Send, ArrowLeft, MoreVertical, Copy, Trash, Settings, Users, LogOut } from "lucide-react";
+import { SearchBar } from "@/components/SearchBar";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -25,6 +26,7 @@ const FarmerGroupChatPage = () => {
     const { user } = useUser();
     const [profileId, setProfileId] = useState<string | null>(null);
     const [newMessage, setNewMessage] = useState("");
+    const [searchQuery, setSearchQuery] = useState("");
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -63,6 +65,13 @@ const FarmerGroupChatPage = () => {
             onSuccess: () => setNewMessage(""),
         });
     };
+
+    // Filter messages by search query
+    const filteredMessages = messages?.filter((msg: any) => {
+        const decrypted = decryptMessage(msg.content, id!);
+        return decrypted.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            msg.sender?.full_name?.toLowerCase().includes(searchQuery.toLowerCase());
+    }) || [];
 
     const handleCopy = (content: string) => {
         if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -226,10 +235,17 @@ const FarmerGroupChatPage = () => {
                         </Dialog>
                     )}
                 </div>
+                {/* Search Messages */}
+                <div className="p-4 border-b border-border bg-muted/30">
+                    <SearchBar 
+                        placeholder="Search messages..." 
+                        onSearch={setSearchQuery} 
+                    />
+                </div>
                 {/* Messages Area */}
                 <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                    {messages && messages.length > 0 ? (
-                        messages.map((msg) => {
+                    {filteredMessages && filteredMessages.length > 0 ? (
+                        filteredMessages.map((msg) => {
                             const isMe = msg.sender_id === profileId;
                             return (
                                 <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"} group`}>
@@ -292,9 +308,13 @@ const FarmerGroupChatPage = () => {
                                 </div>
                             );
                         })
-                    ) : (
+                    ) : messages && messages.length === 0 ? (
                         <div className="h-full flex items-center justify-center text-muted-foreground text-sm">
                             No messages yet. Be the first to say hi!
+                        </div>
+                    ) : (
+                        <div className="h-full flex items-center justify-center text-muted-foreground text-sm">
+                            No messages match your search.
                         </div>
                     )}
                     <div ref={messagesEndRef} />

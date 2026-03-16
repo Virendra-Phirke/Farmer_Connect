@@ -5,6 +5,7 @@ import { getWeatherAlerts } from "@/lib/api/weather-alerts";
 import { fetchCoordinates, fetch7DayForecast, WeatherForecast, CurrentWeather, getWeatherDescription } from "@/lib/api/open-meteo";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Loader2, CloudSun, AlertTriangle, Info, Sun, Cloud, CloudFog, CloudDrizzle, CloudRain, CloudSnow, CloudLightning, MapPin, Droplets, CalendarDays, Thermometer, Wind, Activity } from "lucide-react";
+import { SearchBar } from "@/components/SearchBar";
 
 const severityStyles: Record<string, string> = {
     info: "border-blue-200 bg-blue-50",
@@ -31,11 +32,19 @@ const WeatherAlertsPage = () => {
     const { user } = useUser();
     const [alerts, setAlerts] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [searchQuery, setSearchQuery] = useState("");
 
     const [forecasts, setForecasts] = useState<WeatherForecast[]>([]);
     const [currentWeather, setCurrentWeather] = useState<CurrentWeather | null>(null);
     const [locationName, setLocationName] = useState<string>("");
     const [weatherLoading, setWeatherLoading] = useState(true);
+
+    // Filter forecasts by search query
+    const filteredForecasts = forecasts.filter((forecast: WeatherForecast) => {
+        const desc = getWeatherDescription(forecast.weatherCode);
+        return desc.text.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            forecast.date.includes(searchQuery);
+    });
 
     useEffect(() => {
         async function load() {
@@ -153,15 +162,24 @@ const WeatherAlertsPage = () => {
                         )}
                     </h2>
 
+                    <SearchBar 
+                        placeholder="Search by weather type or date..." 
+                        onSearch={setSearchQuery} 
+                    />
+
                     {weatherLoading ? (
                         <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
                     ) : forecasts.length === 0 ? (
                         <div className="bg-card rounded-xl border border-border p-12 text-center text-muted-foreground">
                             We couldn't fetch the forecast for your area. Please ensure your Profile Location is up to date.
                         </div>
+                    ) : !filteredForecasts.length ? (
+                        <div className="bg-card rounded-xl border border-border p-12 text-center text-muted-foreground">
+                            No forecasts match your search.
+                        </div>
                     ) : (
                         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
-                            {forecasts.map((forecast, index) => {
+                            {filteredForecasts.map((forecast, index) => {
                                 const desc = getWeatherDescription(forecast.weatherCode);
                                 const isToday = index === 0;
                                 const dateObj = new Date(forecast.date);

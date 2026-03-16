@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import DashboardLayout from "@/components/DashboardLayout";
 import { BillReceiptDialog } from "@/components/BillReceiptDialog";
+import { SearchBar } from "@/components/SearchBar";
 import { getProfileId } from "@/lib/supabase-auth";
 import { usePurchaseRequests } from "@/hooks/usePurchaseRequests";
 import { useSupplyContracts } from "@/hooks/useSupplyContracts";
@@ -14,6 +15,7 @@ const BillingPage = () => {
   const [profileId, setProfileId] = useState<string | null>(null);
   const [isBillOpen, setIsBillOpen] = useState(false);
   const [selectedBill, setSelectedBill] = useState<any>(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     if (user?.id) getProfileId(user.id).then(setProfileId);
@@ -37,6 +39,23 @@ const BillingPage = () => {
   const contractBills = useMemo(
     () => (contracts || []).filter((c: any) => c.status !== "pending"),
     [contracts]
+  );
+
+  // Filter bills by search query
+  const filteredPurchaseBills = useMemo(
+    () => purchaseBills.filter((req: any) =>
+      req.crop_listing?.crop_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      req.crop_listing?.farmer?.full_name?.toLowerCase().includes(searchQuery.toLowerCase())
+    ),
+    [purchaseBills, searchQuery]
+  );
+
+  const filteredContractBills = useMemo(
+    () => contractBills.filter((c: any) =>
+      c.crop_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      c.farmer?.full_name?.toLowerCase().includes(searchQuery.toLowerCase())
+    ),
+    [contractBills, searchQuery]
   );
 
   const showPurchaseBill = (req: any) => {
@@ -162,6 +181,11 @@ const BillingPage = () => {
           <Receipt className="h-6 w-6" /> Hotel Billing Center
         </h2>
 
+        <SearchBar 
+          placeholder="Search by crop name or seller..." 
+          onSearch={setSearchQuery} 
+        />
+
         {isLoading ? (
           <div className="flex justify-center py-16">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -178,9 +202,13 @@ const BillingPage = () => {
                 <div className="bg-card rounded-xl border border-border p-12 text-center text-muted-foreground">
                   No purchase bills yet.
                 </div>
+              ) : !filteredPurchaseBills.length ? (
+                <div className="bg-card rounded-xl border border-border p-12 text-center text-muted-foreground">
+                  No purchase bills match your search.
+                </div>
               ) : (
                 <div className="space-y-4">
-                  {purchaseBills.map((req: any) => (
+                  {filteredPurchaseBills.map((req: any) => (
                     <div key={req.id} className="bg-card rounded-xl border border-border p-4 sm:p-6 flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4">
                       <div>
                         <p className="font-semibold">{req.crop_listing?.crop_name || "Crop"}</p>
@@ -202,9 +230,13 @@ const BillingPage = () => {
                 <div className="bg-card rounded-xl border border-border p-12 text-center text-muted-foreground">
                   No contract bills yet.
                 </div>
+              ) : !filteredContractBills.length ? (
+                <div className="bg-card rounded-xl border border-border p-12 text-center text-muted-foreground">
+                  No contract bills match your search.
+                </div>
               ) : (
                 <div className="space-y-4">
-                  {contractBills.map((contract: any) => (
+                  {filteredContractBills.map((contract: any) => (
                     <div key={contract.id} className="bg-card rounded-xl border border-border p-4 sm:p-6 flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4">
                       <div>
                         <p className="font-semibold">{contract.crop_name}</p>
