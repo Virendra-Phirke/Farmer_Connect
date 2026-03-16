@@ -72,6 +72,17 @@ const PurchaseRequestsPage = () => {
         const unitPrice = Number(req.offered_price || 0);
         const billId = billingIdOverride || req.billing_id || `INV-PR-${req.id.slice(0, 8).toUpperCase()}`;
 
+        // Get seller data - prefer crop_listing.farmer, fallback to current user
+        const farmer = req.crop_listing?.farmer;
+        const sellerName = farmer?.full_name || user?.fullName || "Seller";
+        const sellerEmail = farmer?.email || user?.primaryEmailAddress?.emailAddress;
+        const sellerPhone = farmer?.phone;
+        const sellerLocation = farmer?.location;
+        const sellerState = farmer?.state;
+        const sellerDistrict = farmer?.district;
+        const sellerTaluka = farmer?.taluka;
+        const sellerVillageCity = farmer?.village_city;
+
         setSelectedBill({
             title: `${cropName} - Purchase Request`,
             receiptNumber: `RCPT-${billId.slice(0, 8).toUpperCase()}`,
@@ -97,15 +108,15 @@ const PurchaseRequestsPage = () => {
                 village_city: buyerVillageCity,
             },
             seller: {
-                id: req.crop_listing?.farmer?.id || profileId || undefined,
-                name: req.crop_listing?.farmer?.full_name || user?.fullName || "Seller",
-                phone: req.crop_listing?.farmer?.phone,
-                email: req.crop_listing?.farmer?.email || user?.primaryEmailAddress?.emailAddress || undefined,
-                address: req.crop_listing?.farmer?.location,
-                state: req.crop_listing?.farmer?.state,
-                district: req.crop_listing?.farmer?.district,
-                taluka: req.crop_listing?.farmer?.taluka,
-                village_city: req.crop_listing?.farmer?.village_city,
+                id: farmer?.id || profileId,
+                name: sellerName,
+                phone: sellerPhone,
+                email: sellerEmail,
+                address: sellerLocation,
+                state: sellerState,
+                district: sellerDistrict,
+                taluka: sellerTaluka,
+                village_city: sellerVillageCity,
             },
             lineItems: [
                 {
