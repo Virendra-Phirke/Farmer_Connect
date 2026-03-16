@@ -92,27 +92,41 @@ export async function getPurchaseRequests(filters?: {
                 data.map(async (request: any) => {
                     const enrichedRequest = { ...request };
 
-                    // Refresh buyer profile phone
+                    // Refresh buyer profile phone - check all sources
                     if (request.buyer_id) {
-                        const { data: freshBuyer } = await supabase
+                        const { data: freshBuyer } = await (supabase as any)
                             .from("profiles")
-                            .select("phone")
+                            .select(`
+                              phone,
+                              buyer_profiles(mobile_number),
+                              equipment_owner_profiles(mobile_number)
+                            `)
                             .eq("id", request.buyer_id)
                             .maybeSingle();
                         if (freshBuyer && enrichedRequest.buyer) {
-                            enrichedRequest.buyer.phone = freshBuyer.phone;
+                            const buyerRoleData = Array.isArray(freshBuyer.buyer_profiles) ? freshBuyer.buyer_profiles[0] : freshBuyer.buyer_profiles;
+                            const equipmentRoleData = Array.isArray(freshBuyer.equipment_owner_profiles) ? freshBuyer.equipment_owner_profiles[0] : freshBuyer.equipment_owner_profiles;
+                            enrichedRequest.buyer.phone = freshBuyer.phone || buyerRoleData?.mobile_number || equipmentRoleData?.mobile_number;
                         }
                     }
 
-                    // Refresh farmer profile phone via crop_listing
+                    // Refresh farmer profile phone - check all sources
                     if (request.crop_listing?.farmer?.id) {
-                        const { data: freshFarmer } = await supabase
+                        const { data: freshFarmer } = await (supabase as any)
                             .from("profiles")
-                            .select("phone")
+                            .select(`
+                              phone,
+                              farmer_profiles(mobile_number),
+                              buyer_profiles(mobile_number),
+                              equipment_owner_profiles(mobile_number)
+                            `)
                             .eq("id", request.crop_listing.farmer.id)
                             .maybeSingle();
                         if (freshFarmer && enrichedRequest.crop_listing?.farmer) {
-                            enrichedRequest.crop_listing.farmer.phone = freshFarmer.phone;
+                            const farmerRoleData = Array.isArray(freshFarmer.farmer_profiles) ? freshFarmer.farmer_profiles[0] : freshFarmer.farmer_profiles;
+                            const buyerRoleData = Array.isArray(freshFarmer.buyer_profiles) ? freshFarmer.buyer_profiles[0] : freshFarmer.buyer_profiles;
+                            const equipmentRoleData = Array.isArray(freshFarmer.equipment_owner_profiles) ? freshFarmer.equipment_owner_profiles[0] : freshFarmer.equipment_owner_profiles;
+                            enrichedRequest.crop_listing.farmer.phone = freshFarmer.phone || farmerRoleData?.mobile_number || buyerRoleData?.mobile_number || equipmentRoleData?.mobile_number;
                         }
                     }
 
