@@ -41,9 +41,9 @@ const BillingPage = () => {
 
   const showPurchaseBill = (req: any) => {
     const cropName = req.crop_listing?.crop_name || "Crop";
-    const computedAmount = req.total_amount || (req.quantity_kg * req.offered_price);
     const quantity = Number(req.quantity_kg || 0);
     const unitPrice = Number(req.offered_price || 0);
+    const computedAmount = Number(req.total_amount ?? (quantity * unitPrice));
     const billId = req.billing_id || `INV-${req.id.slice(0, 8).toUpperCase()}`;
 
     setSelectedBill({
@@ -56,6 +56,7 @@ const BillingPage = () => {
       date: new Date(req.created_at || new Date()).toLocaleDateString(),
       amount: computedAmount,
       paymentStatus: req.payment_status || "unpaid",
+      paymentConfirmedAt: req.payment_status === "paid" ? new Date(req.updated_at || req.created_at).toLocaleString() : undefined,
       status: req.status || "accepted",
       buyer: {
         id: req.buyer?.id || profileId || undefined,
@@ -98,7 +99,7 @@ const BillingPage = () => {
 
   const showContractBill = (contract: any) => {
     const quantityPerDelivery = contract.quantity_kg_per_delivery ?? contract.quantity_per_delivery ?? 0;
-    const computedAmount = Number(contract.price_per_kg || 0) * Number(quantityPerDelivery || 0);
+    const computedAmount = Number(contract.total_amount ?? (Number(contract.price_per_kg || 0) * Number(quantityPerDelivery || 0)));
     const billId = contract.billing_id || `CONT-${contract.id.slice(0, 8).toUpperCase()}`;
 
     setSelectedBill({
@@ -111,6 +112,7 @@ const BillingPage = () => {
       date: new Date(contract.start_date || contract.created_at || new Date()).toLocaleDateString(),
       amount: computedAmount,
       paymentStatus: contract.payment_status || "unpaid",
+      paymentConfirmedAt: contract.payment_status === "paid" ? new Date(contract.updated_at || contract.created_at).toLocaleString() : undefined,
       status: contract.status || "active",
       buyer: {
         id: contract.buyer?.id || profileId || undefined,
@@ -179,12 +181,12 @@ const BillingPage = () => {
               ) : (
                 <div className="space-y-4">
                   {purchaseBills.map((req: any) => (
-                    <div key={req.id} className="bg-card rounded-xl border border-border p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div key={req.id} className="bg-card rounded-xl border border-border p-4 sm:p-6 flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4">
                       <div>
                         <p className="font-semibold">{req.crop_listing?.crop_name || "Crop"}</p>
                         <p className="text-sm text-muted-foreground">Qty: {req.quantity_kg} kg @ ₹{req.offered_price}/kg</p>
                         <p className="text-sm text-muted-foreground">Seller: {req.crop_listing?.farmer?.full_name || "Farmer"}</p>
-                        <p className="text-sm font-medium mt-1">Amount: ₹{req.total_amount || (req.quantity_kg * req.offered_price)}</p>
+                        <p className="text-sm font-medium mt-1">Amount: ₹{Number(req.total_amount ?? (Number(req.quantity_kg || 0) * Number(req.offered_price || 0)))}</p>
                       </div>
                       <Button size="sm" variant="outline" onClick={() => showPurchaseBill(req)} className="flex items-center gap-1">
                         <FileText className="h-4 w-4" /> View Bill
@@ -203,12 +205,12 @@ const BillingPage = () => {
               ) : (
                 <div className="space-y-4">
                   {contractBills.map((contract: any) => (
-                    <div key={contract.id} className="bg-card rounded-xl border border-border p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div key={contract.id} className="bg-card rounded-xl border border-border p-4 sm:p-6 flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4">
                       <div>
                         <p className="font-semibold">{contract.crop_name}</p>
                         <p className="text-sm text-muted-foreground">Delivery: {contract.quantity_kg_per_delivery} kg / {contract.delivery_frequency}</p>
                         <p className="text-sm text-muted-foreground">Farmer: {contract.farmer?.full_name || "Farmer"}</p>
-                        <p className="text-sm font-medium mt-1">Amount: ₹{(contract.price_per_kg || 0) * (contract.quantity_kg_per_delivery || 0)}</p>
+                        <p className="text-sm font-medium mt-1">Amount: ₹{Number(contract.total_amount ?? (Number(contract.price_per_kg || 0) * Number(contract.quantity_kg_per_delivery || 0)))}</p>
                       </div>
                       <Button size="sm" variant="outline" onClick={() => showContractBill(contract)} className="flex items-center gap-1">
                         <FileText className="h-4 w-4" /> View Bill

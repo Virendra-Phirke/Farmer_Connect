@@ -17,7 +17,12 @@ export type SupplyContract = {
     updated_at: string;
 };
 
-export type SupplyContractInsert = Omit<SupplyContract, "id" | "created_at" | "updated_at">;
+export type SupplyContractInsert = Omit<SupplyContract, "id" | "created_at" | "updated_at" | "status" | "payment_status" | "billing_id"> & {
+    status?: SupplyContract["status"];
+    payment_status?: SupplyContract["payment_status"];
+    billing_id?: SupplyContract["billing_id"];
+    total_amount?: number;
+};
 
 export async function getSupplyContracts(filters?: {
     buyer_id?: string;
@@ -137,15 +142,46 @@ export async function createSupplyContract(contract: SupplyContractInsert) {
         console.warn("Could not self-heal buyer_profiles:", e);
     }
 
-    const { data, error } = await supabase
+    const basePayload: Record<string, any> = {
+        ...contract,
+        quantity_kg_per_delivery: Number(contract.quantity_kg_per_delivery),
+        price_per_kg: Number(contract.price_per_kg),
+        status: contract.status ?? "pending",
+    };
+
+    if (basePayload.billing_id == null) {
+        delete basePayload.billing_id;
+    }
+    if (basePayload.payment_status == null) {
+        delete basePayload.payment_status;
+    }
+
+    // Try modern schema first
+    let { data, error } = await supabase
         .from("supply_contracts")
-        .insert(contract)
+        .insert(basePayload)
         .select()
         .single();
 
+    // Fallback: older schema without payment_status / billing_id columns
+    if (error && error.code === "PGRST204") {
+        const legacyPayload = { ...basePayload };
+        delete legacyPayload.payment_status;
+        delete legacyPayload.billing_id;
+
+        const retry = await supabase
+            .from("supply_contracts")
+            .insert(legacyPayload)
+            .select()
+            .single();
+
+        data = retry.data;
+        error = retry.error;
+    }
+
     if (error) {
         console.error("Error creating supply contract:", error);
-        throw error;
+        throw new Error(error.message || "Failed to create supply contract");
     }
 
     return data;

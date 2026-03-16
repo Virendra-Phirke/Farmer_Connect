@@ -14,13 +14,14 @@ export function useEquipmentBookings(filters?: {
     equipment_id?: string;
     renter_id?: string;
     status?: string;
-}) {
+}, options?: { enabled?: boolean; refetchInterval?: number | false }) {
     const idFilter = filters?.renter_id ?? filters?.equipment_id;
     const hasIdFilter = "renter_id" in (filters ?? {}) || "equipment_id" in (filters ?? {});
     return useQuery({
         queryKey: ["equipment-bookings", filters],
         queryFn: () => getEquipmentBookings(filters),
-        enabled: !hasIdFilter || !!idFilter,
+        enabled: options?.enabled !== undefined ? options.enabled : (!hasIdFilter || !!idFilter),
+        refetchInterval: options?.refetchInterval,
     });
 }
 
@@ -32,11 +33,12 @@ export function useEquipmentBooking(id: string) {
     });
 }
 
-export function useOwnerBookings(ownerId: string) {
+export function useOwnerBookings(ownerId: string, options?: { enabled?: boolean; refetchInterval?: number | false }) {
     return useQuery({
         queryKey: ["owner-bookings", ownerId],
         queryFn: () => getOwnerBookings(ownerId),
-        enabled: !!ownerId,
+        enabled: options?.enabled !== undefined ? options.enabled : !!ownerId,
+        refetchInterval: options?.refetchInterval,
     });
 }
 

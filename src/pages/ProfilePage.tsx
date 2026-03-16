@@ -22,8 +22,6 @@ const ProfilePage = () => {
     const [isSaving, setIsSaving] = useState(false);
     const [profileId, setProfileId] = useState<string | null>(null);
 
-    const [fullName, setFullName] = useState("");
-    const [email, setEmail] = useState("");
     const [phone, setPhone] = useState("");
     const [availableEquipment, setAvailableEquipment] = useState("");
 
@@ -32,6 +30,7 @@ const ProfilePage = () => {
     const [district, setDistrict] = useState("");
     const [subDistrict, setSubDistrict] = useState("");
     const [villageCity, setVillageCity] = useState("");
+    const [landmark, setLandmark] = useState("");
 
     // Use Indian Locations Hook
     const { states, districts, subDistricts, villages, isLoading: locationsLoading } = useIndianLocations(state, district, subDistrict);
@@ -59,8 +58,6 @@ const ProfilePage = () => {
 
             if (profileData) {
                 setProfile(profileData);
-                setFullName(profileData.full_name || user.fullName || "");
-                setEmail(profileData.email || user.primaryEmailAddress?.emailAddress || "");
                 setPhone(profileData.phone || "");
                 setAvailableEquipment(profileData.available_equipment || "");
 
@@ -69,6 +66,7 @@ const ProfilePage = () => {
                 setDistrict(profileData.district || "");
                 setSubDistrict(profileData.taluka || "");
                 setVillageCity(profileData.village_city || "");
+                setLandmark(profileData.landmark || "");
             }
             setIsLoading(false);
         }
@@ -80,7 +78,6 @@ const ProfilePage = () => {
         setIsSaving(true);
         try {
             await updateUserProfile(user.id, {
-                full_name: fullName || null,
                 phone: phone || null,
                 // Equipment for farmer and equipment owners
                 available_equipment: (role === "farmer" || role === "equipment_owner") ? (availableEquipment || null) : null,
@@ -89,7 +86,8 @@ const ProfilePage = () => {
                 district: district || null,
                 taluka: subDistrict || null,
                 village_city: villageCity || null,
-                location: [villageCity, subDistrict, district, state].filter(Boolean).join(', ') || null,
+                landmark: landmark || null,
+                location: [landmark, villageCity, subDistrict, district, state].filter(Boolean).join(', ') || null,
             });
             toast.success("Profile saved successfully!");
         } catch (error) {
@@ -119,11 +117,13 @@ const ProfilePage = () => {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="space-y-2">
                             <Label htmlFor="fullName">Full Name</Label>
-                            <Input id="fullName" value={fullName} onChange={e => setFullName(e.target.value)} />
+                            <Input id="fullName" value={user?.fullName || profile?.full_name || ""} disabled className="opacity-60" />
+                            <p className="text-xs text-muted-foreground">Managed by Clerk</p>
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="email">Email</Label>
-                            <Input id="email" value={email} disabled className="opacity-60" />
+                            <Input id="email" value={user?.primaryEmailAddress?.emailAddress || profile?.email || ""} disabled className="opacity-60" />
+                            <p className="text-xs text-muted-foreground">Managed by Clerk</p>
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="phone">Phone</Label>
@@ -187,6 +187,10 @@ const ProfilePage = () => {
                                     ))}
                                 </SelectContent>
                             </Select>
+                        </div>
+                        <div className="space-y-2 md:col-span-2">
+                            <Label htmlFor="landmark">Landmark</Label>
+                            <Input id="landmark" value={landmark} onChange={e => setLandmark(e.target.value)} placeholder="Near temple / school / main road" />
                         </div>
                     </div>
                 </section>

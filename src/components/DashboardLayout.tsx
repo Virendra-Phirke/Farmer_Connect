@@ -3,8 +3,8 @@ import { Tractor, Bell, ArrowLeft, Home } from "lucide-react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useEffect, useState } from "react";
-import { getProfileId } from "@/lib/supabase-auth";
-import { usePurchaseRequests } from "@/hooks/usePurchaseRequests";
+import { getProfileId, getUserProfile, updateUserProfile } from "@/lib/supabase-auth";
+import { usePurchaseRequests, useFarmerPurchaseRequests } from "@/hooks/usePurchaseRequests";
 import { useOwnerBookings, useEquipmentBookings } from "@/hooks/useEquipmentBookings";
 import { useSupplyContracts } from "@/hooks/useSupplyContracts";
 import { getEquipmentPaymentStatus } from "@/lib/api/equipment-bookings";
@@ -36,10 +36,12 @@ const DashboardLayout = ({ children, subtitle }: DashboardLayoutProps) => {
     const navigate = useNavigate();
     const location = useLocation();
     const notificationsInitializedRef = useRef(false);
+    const profilePhoneSyncInitializedRef = useRef(false);
     const hotelPurchasesRef = useRef<Record<string, string>>({});
     const farmerRentalsRef = useRef<Record<string, string>>({});
     const farmerContractsRef = useRef<Record<string, string>>({});
     const equipmentRequestsRef = useRef<Record<string, string>>({});
+    const farmerCropRequestsRef = useRef<Record<string, string>>({});
 
     // Check if we are on one of the main dashboard pages
     const isDashboardRoot = location.pathname.includes("-dashboard");
@@ -50,32 +52,56 @@ const DashboardLayout = ({ children, subtitle }: DashboardLayoutProps) => {
         if (user?.id) getProfileId(user.id).then(setProfileId);
     }, [user?.id]);
 
+    useEffect(() => {
+        const syncProfilePhone = async () => {
+            if (!user?.id || profilePhoneSyncInitializedRef.current) return;
+            profilePhoneSyncInitializedRef.current = true;
+            try {
+                const clerkPhone = user.phoneNumbers?.[0]?.phoneNumber;
+                if (!clerkPhone) return;
+                const profile = await getUserProfile(user.id);
+                if (!profile?.phone) {
+                    await updateUserProfile(user.id, { phone: clerkPhone });
+                }
+            } catch (e) {
+                console.warn("Could not auto-sync profile phone:", e);
+            }
+        };
+        void syncProfilePhone();
+    }, [user?.id, user?.phoneNumbers]);
+
     // Farmers: get pending purchase requests (incoming)
-    const { data: cropRequests } = usePurchaseRequests(
-        (role === "farmer" && profileId) ? { status: "pending" } : undefined
+    const { data: cropRequests } = useFarmerPurchaseRequests(
+        (role === "farmer" && profileId) ? profileId : "",
+        { enabled: role === "farmer" && !!profileId, refetchInterval: 15000 }
     );
     // Tool Owners: get pending equipment rentals (incoming)
     const { data: equipmentRequests } = useOwnerBookings(
-        (role === "equipment_owner" && profileId) ? profileId : ""
+        (role === "equipment_owner" && profileId) ? profileId : "",
+        { enabled: role === "equipment_owner" && !!profileId, refetchInterval: 15000 }
     );
     // Hotels: get purchase history (outgoing) to check for accepted/rejected
     const { data: hotelPurchases } = usePurchaseRequests(
-        (role === "hotel_restaurant_manager" && profileId) ? { buyer_id: profileId } : undefined
+        (role === "hotel_restaurant_manager" && profileId) ? { buyer_id: profileId } : undefined,
+        { enabled: role === "hotel_restaurant_manager" && !!profileId, refetchInterval: 15000 }
     );
     // Farmers: get rental history (outgoing)
     const { data: farmerRentals } = useEquipmentBookings(
-        (role === "farmer" && profileId) ? { renter_id: profileId } : undefined
+        (role === "farmer" && profileId) ? { renter_id: profileId } : undefined,
+        { enabled: role === "farmer" && !!profileId, refetchInterval: 15000 }
     );
     // Hotels: get incoming supply contracts (incoming)
     const { data: hotelContracts } = useSupplyContracts(
-        (role === "hotel_restaurant_manager" && profileId) ? { buyer_id: profileId } : undefined
+        (role === "hotel_restaurant_manager" && profileId) ? { buyer_id: profileId } : undefined,
+        { enabled: role === "hotel_restaurant_manager" && !!profileId, refetchInterval: 15000 }
     );
     // Farmers: get outgoing supply contracts (outgoing) to check for active/cancelled
     const { data: farmerContracts } = useSupplyContracts(
-        (role === "farmer" && profileId) ? { farmer_id: profileId } : undefined
+        (role === "farmer" && profileId) ? { farmer_id: profileId } : undefined,
+        { enabled: role === "farmer" && !!profileId, refetchInterval: 15000 }
     );
 
-    const pendingCropRequests = cropRequests?.length || 0;
+    const pendingCropRequests = cropRequests?.filter((r: any) => r.status === "pending").length || 0;
     const pendingEquipmentRequests = equipmentRequests?.filter((b: any) => b.status === "pending").length || 0;
     const pendingFarmerRentals = farmerRentals?.filter((r: any) => r.status === "pending" || r.status === "awaiting_confirmation").length || 0;
     const pendingSupplyContracts = hotelContracts?.filter((c: any) => c.status === "pending").length || 0;
@@ -120,6 +146,33 @@ const DashboardLayout = ({ children, subtitle }: DashboardLayoutProps) => {
         }
 
         if (role === "farmer") {
+            const cropRequestMap: Record<string, string> = {};
+            (cropRequests || []).forEach((request: any) => {
+                cropRequestMap[request.id] = getSignature(request);
+            });
+
+            if (notificationsInitializedRef.current) {
+                (cropRequests || []).forEach((request: any) => {
+                    const prev = farmerCropRequestsRef.current[request.id];
+                    const curr = cropRequestMap[request.id];
+                    if (!prev && request.status === "pending") {
+                        toast.info("New crop purchase request received.");
+                    }
+                    if (prev && prev !== curr) {
+                        if (request.status === "accepted") {
+                            toast.success("A purchase request was accepted and billing is available.");
+                        } else if (request.status === "rejected") {
+                            toast.error("A purchase request was rejected.");
+                        }
+                        if (request.payment_status === "paid") {
+                            toast.success("Purchase payment was marked as paid.");
+                        }
+                    }
+                });
+            }
+
+            farmerCropRequestsRef.current = cropRequestMap;
+
             const rentalMap: Record<string, string> = {};
             (farmerRentals || []).forEach((booking: any) => {
                 rentalMap[booking.id] = getSignature(booking);
@@ -199,6 +252,7 @@ const DashboardLayout = ({ children, subtitle }: DashboardLayoutProps) => {
     }, [
         role,
         profileId,
+        cropRequests,
         hotelPurchases,
         farmerRentals,
         farmerContracts,

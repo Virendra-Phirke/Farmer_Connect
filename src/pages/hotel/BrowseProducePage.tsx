@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useCropListings } from "@/hooks/useCropListings";
 import { useCreatePurchaseRequest } from "@/hooks/usePurchaseRequests";
 import { useUser } from "@clerk/clerk-react";
-import { getProfileId } from "@/lib/supabase-auth";
+import { getProfileId, getUserProfile, updateUserProfile } from "@/lib/supabase-auth";
 import { safeStorageGetItem, safeStorageSetItem } from "@/lib/storage";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Loader2, Store, Heart } from "lucide-react";
@@ -63,9 +63,29 @@ const BrowseProducePage = () => {
         return matchesSearch && matchesFavorites;
     });
 
-    const handleSendRequest = () => {
+    const handleSendRequest = async () => {
         if (!profileId || !selectedCrop || !requestQuantity) {
             toast.error("Please fill in quantity.");
+            return;
+        }
+
+        try {
+            if (user?.id) {
+                const clerkPhone = user?.phoneNumbers?.[0]?.phoneNumber;
+                const existing = await getUserProfile(user.id);
+                if (!existing?.phone && clerkPhone) {
+                    await updateUserProfile(user.id, { phone: clerkPhone });
+                }
+
+                const refreshed = await getUserProfile(user.id);
+                if (!refreshed?.phone) {
+                    toast.error("Please add your mobile number in Profile before sending requests.");
+                    return;
+                }
+            }
+        } catch (e) {
+            console.warn("Could not sync buyer phone to profile before purchase request:", e);
+            toast.error("Please add your mobile number in Profile before sending requests.");
             return;
         }
 
@@ -87,7 +107,9 @@ const BrowseProducePage = () => {
             offered_price: selectedCrop.price_per_kg,
             request_type: "single",
             status: "pending",
-            message: message || undefined
+            message: message || undefined,
+            payment_status: "unpaid",
+            billing_id: null
         }, {
             onSuccess: () => {
                 toast.success("Purchase request sent to farmer!");
@@ -130,20 +152,20 @@ const BrowseProducePage = () => {
                             : "No produce available right now. Check back later!"}
                     </div>
                 ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-6">
                         {filteredListings.map((item: any) => {
                             const isFavorite = favoriteFarmers.includes(item.farmer_id);
 
                             return (
-                                <div key={item.id} className="bg-card rounded-xl border border-border p-6 hover:shadow-md transition-shadow relative">
-                                    <div className="flex items-center justify-between mb-4">
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-10 h-10 rounded-lg bg-orange-500/10 flex items-center justify-center">
-                                                <Store className="h-5 w-5 text-orange-600" />
+                                <div key={item.id} className="bg-card rounded-xl border border-border p-3 md:p-6 hover:shadow-md transition-shadow relative">
+                                    <div className="flex items-center justify-between mb-3 md:mb-4 gap-2">
+                                        <div className="flex items-center gap-2 md:gap-3 min-w-0">
+                                            <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-orange-500/10 flex items-center justify-center shrink-0">
+                                                <Store className="h-4 w-4 md:h-5 md:w-5 text-orange-600" />
                                             </div>
-                                            <div>
-                                                <h3 className="font-semibold">{item.crop_name}</h3>
-                                                <span className="text-xs text-muted-foreground">{item.quantity_kg} kg available</span>
+                                            <div className="min-w-0">
+                                                <h3 className="font-semibold text-sm md:text-base truncate">{item.crop_name}</h3>
+                                                <span className="text-[11px] md:text-xs text-muted-foreground">{item.quantity_kg} kg</span>
                                             </div>
                                         </div>
                                         <Button
@@ -153,13 +175,13 @@ const BrowseProducePage = () => {
                                             className="text-muted-foreground hover:text-red-500 hover:bg-red-50"
                                             title={isFavorite ? "Unfavorite Farmer" : "Favorite Farmer"}
                                         >
-                                            <Heart className={`h-5 w-5 ${isFavorite ? "fill-red-500 text-red-500" : ""}`} />
+                                            <Heart className={`h-4 w-4 md:h-5 md:w-5 ${isFavorite ? "fill-red-500 text-red-500" : ""}`} />
                                             <span className="sr-only">Toggle favorite</span>
                                         </Button>
                                     </div>
-                                    <p className="text-lg font-bold text-primary mb-2">₹{item.price_per_kg}/kg</p>
-                                    {item.description && <p className="text-sm text-muted-foreground mb-4">{item.description}</p>}
-                                    <Button className="w-full mt-auto" onClick={() => setSelectedCrop(item)}>Send Purchase Request</Button>
+                                    <p className="text-sm md:text-lg font-bold text-primary mb-2">₹{item.price_per_kg}/kg</p>
+                                    {item.description && <p className="text-xs md:text-sm text-muted-foreground mb-3 md:mb-4 line-clamp-2">{item.description}</p>}
+                                    <Button className="w-full mt-auto text-xs md:text-sm h-8 md:h-10" onClick={() => setSelectedCrop(item)}>Request</Button>
                                 </div>
                             );
                         })}

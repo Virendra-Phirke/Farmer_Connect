@@ -28,32 +28,38 @@ export const NotificationCenter = ({ open, onOpenChange }: NotificationCenterPro
 
     // Farmers: get pending purchase requests (incoming) - requests from hotels
     const { data: cropRequests, isLoading: cropRequestsLoading } = useFarmerPurchaseRequests(
-        (role === "farmer" && profileId) ? profileId : ""
+        (role === "farmer" && profileId) ? profileId : "",
+        { enabled: role === "farmer" && !!profileId, refetchInterval: 15000 }
     );
     
     // Tool Owners: get pending equipment rentals (incoming)
     const { data: equipmentRequests, isLoading: equipmentRequestsLoading } = useOwnerBookings(
-        (role === "equipment_owner" && profileId) ? profileId : ""
+        (role === "equipment_owner" && profileId) ? profileId : "",
+        { enabled: role === "equipment_owner" && !!profileId, refetchInterval: 15000 }
     );
 
     // Hotels: get purchase requests
     const { data: hotelPurchases, isLoading: hotelPurchasesLoading } = usePurchaseRequests(
-        (role === "hotel_restaurant_manager" && profileId) ? { buyer_id: profileId } : undefined
+        (role === "hotel_restaurant_manager" && profileId) ? { buyer_id: profileId } : undefined,
+        { enabled: role === "hotel_restaurant_manager" && !!profileId, refetchInterval: 15000 }
     );
 
     // Farmers: get rental history (outgoing)
     const { data: farmerRentals, isLoading: farmerRentalsLoading } = useEquipmentBookings(
-        (role === "farmer" && profileId) ? { renter_id: profileId } : undefined
+        (role === "farmer" && profileId) ? { renter_id: profileId } : undefined,
+        { enabled: role === "farmer" && !!profileId, refetchInterval: 15000 }
     );
 
     // Hotels: get incoming supply contracts (incoming)
     const { data: hotelContracts, isLoading: hotelContractsLoading } = useSupplyContracts(
-        (role === "hotel_restaurant_manager" && profileId) ? { buyer_id: profileId } : undefined
+        (role === "hotel_restaurant_manager" && profileId) ? { buyer_id: profileId } : undefined,
+        { enabled: role === "hotel_restaurant_manager" && !!profileId, refetchInterval: 15000 }
     );
 
     // Farmers: get outgoing supply contracts
     const { data: farmerContracts, isLoading: farmerContractsLoading } = useSupplyContracts(
-        (role === "farmer" && profileId) ? { farmer_id: profileId } : undefined
+        (role === "farmer" && profileId) ? { farmer_id: profileId } : undefined,
+        { enabled: role === "farmer" && !!profileId, refetchInterval: 15000 }
     );
 
     // Calculate pending and history for each role
@@ -62,7 +68,7 @@ export const NotificationCenter = ({ open, onOpenChange }: NotificationCenterPro
     const getPendingNotifications = () => {
         if (role === "farmer") {
             const pending = [
-                ...(cropRequests || []),
+                ...(cropRequests?.filter((r: any) => r.status === "pending") || []),
                 ...(farmerRentals?.filter((r: any) => r.status === "pending" || r.status === "awaiting_confirmation") || []),
                 ...(farmerContracts?.filter((c: any) => c.status === "pending") || []),
             ];
@@ -81,6 +87,7 @@ export const NotificationCenter = ({ open, onOpenChange }: NotificationCenterPro
     const getHistoryNotifications = () => {
         if (role === "farmer") {
             const history = [
+                ...(cropRequests?.filter((r: any) => r.status !== "pending") || []),
                 ...(farmerRentals?.filter((r: any) => r.status === "confirmed" || r.status === "cancelled" || r.status === "completed") || []),
                 ...(farmerContracts?.filter((c: any) => c.status === "active" || c.status === "cancelled" || c.status === "completed") || []),
             ];
@@ -99,6 +106,13 @@ export const NotificationCenter = ({ open, onOpenChange }: NotificationCenterPro
 
     const pending = getPendingNotifications();
     const history = getHistoryNotifications();
+
+    const detectNotificationType = (item: any): "crop" | "rental" | "equipment" | "contract" | "purchase" => {
+        if (item.crop_listing) return "crop";
+        if (item.crop_name) return "contract";
+        if (item.equipment) return role === "equipment_owner" ? "equipment" : "rental";
+        return "purchase";
+    };
 
     const getNotificationPath = (item: any, notificationType: string): string => {
         switch (notificationType) {
@@ -193,17 +207,19 @@ export const NotificationCenter = ({ open, onOpenChange }: NotificationCenterPro
                             </div>
                         </div>
                     );
-                case "purchase":
+                case "purchase": {
+                    const total = item.total_amount ?? item.total_price ?? ((item.quantity_kg || 0) * (item.offered_price || 0));
                     return (
                         <div className="flex items-start gap-3">
                             <ShoppingCart className="h-5 w-5 mt-0.5 flex-shrink-0 text-primary" />
                             <div className="flex-1 min-w-0">
                                 <p className="font-semibold text-sm">Purchase Request</p>
-                                <p className="text-xs text-muted-foreground">₹{item.total_price}</p>
+                                <p className="text-xs text-muted-foreground">₹{total}</p>
                                 <p className="text-xs text-muted-foreground mt-1">Status: {item.status}</p>
                             </div>
                         </div>
                     );
+                }
                 default:
                     return null;
             }
@@ -252,10 +268,7 @@ export const NotificationCenter = ({ open, onOpenChange }: NotificationCenterPro
                                 <div className="text-center py-8 text-muted-foreground">No pending notifications</div>
                             ) : (
                                 pending.map((item: any) => {
-                                    const notificationType = item.crop_listing ? "crop"
-                                        : item.equipment ? (item.renter_id ? "rental" : "equipment")
-                                        : item.crop_name ? "contract"
-                                        : "purchase";
+                                    const notificationType = detectNotificationType(item);
                                     return (
                                         <NotificationItem
                                             key={item.id}
@@ -276,10 +289,7 @@ export const NotificationCenter = ({ open, onOpenChange }: NotificationCenterPro
                                 <div className="text-center py-8 text-muted-foreground">No history</div>
                             ) : (
                                 history.map((item: any) => {
-                                    const notificationType = item.crop_listing ? "crop"
-                                        : item.equipment ? (item.renter_id ? "rental" : "equipment")
-                                        : item.crop_name ? "contract"
-                                        : "purchase";
+                                    const notificationType = detectNotificationType(item);
                                     return (
                                         <NotificationItem
                                             key={item.id}

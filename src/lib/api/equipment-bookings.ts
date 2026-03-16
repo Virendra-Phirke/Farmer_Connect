@@ -339,11 +339,24 @@ export async function getOwnerBookings(ownerId: string) {
         category,
         price_per_day,
         location,
-        owner_id
+                owner_id,
+                owner:profiles!equipment_listings_owner_id_fkey(
+                    id,
+                    full_name,
+                    email,
+                    phone,
+                    location,
+                    state,
+                    district,
+                    taluka,
+                    village_city,
+                    avatar_url
+                )
       ),
       renter:profiles!equipment_bookings_renter_id_fkey(
         id,
         full_name,
+                email,
         phone,
         location,
           state,

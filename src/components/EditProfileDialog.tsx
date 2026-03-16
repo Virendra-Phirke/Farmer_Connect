@@ -24,8 +24,6 @@ export function EditProfileDialog({ open, onOpenChange }: EditProfileDialogProps
 
     // Form State
     const [phone, setPhone] = useState("");
-    const [landSize, setLandSize] = useState("");
-    const [soilType, setSoilType] = useState("");
     const [locationName, setLocationName] = useState("");
 
     // New structured location/land fields 
@@ -33,6 +31,7 @@ export function EditProfileDialog({ open, onOpenChange }: EditProfileDialogProps
     const [district, setDistrict] = useState("");
     const [subDistrict, setSubDistrict] = useState("");
     const [villageCity, setVillageCity] = useState("");
+    const [landmark, setLandmark] = useState("");
     const [surveyNumber, setSurveyNumber] = useState("");
     const [gatNumber, setGatNumber] = useState("");
 
@@ -54,14 +53,13 @@ export function EditProfileDialog({ open, onOpenChange }: EditProfileDialogProps
             if (data) {
                 setProfile(data);
                 setPhone(data.phone || "");
-                setLandSize(data.land_size_acres ? data.land_size_acres.toString() : "");
-                setSoilType(data.soil_type || "");
                 setLocationName(data.location || "");
 
                 setState(data.state || "");
                 setDistrict(data.district || "");
                 setSubDistrict(data.taluka || "");
                 setVillageCity(data.village_city || "");
+                setLandmark(data.landmark || "");
                 setSurveyNumber(data.survey_number || "");
                 setGatNumber(data.gat_number || "");
             }
@@ -74,15 +72,15 @@ export function EditProfileDialog({ open, onOpenChange }: EditProfileDialogProps
         if (!user?.id) return;
         setIsSaving(true);
         try {
+            const computedFarmerLocation = [landmark, villageCity, subDistrict, district, state].filter(Boolean).join(", ") || null;
             await updateUserProfile(user.id, {
                 phone: phone || null,
-                land_size_acres: landSize ? parseFloat(landSize) : null,
-                soil_type: soilType || null,
-                location: role !== "farmer" ? (locationName || null) : null,
+                location: role === "farmer" ? computedFarmerLocation : (locationName || null),
                 state: role === "farmer" ? state : null,
                 district: role === "farmer" ? (district || null) : null,
                 taluka: role === "farmer" ? (subDistrict || null) : null,
                 village_city: role === "farmer" ? (villageCity || null) : null,
+                landmark: landmark || null,
                 survey_number: role === "farmer" ? (surveyNumber || null) : null,
                 gat_number: role === "farmer" ? (gatNumber || null) : null,
             });
@@ -100,7 +98,7 @@ export function EditProfileDialog({ open, onOpenChange }: EditProfileDialogProps
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
-                    <DialogTitle>Edit Profile & Location</DialogTitle>
+                    <DialogTitle>Edit Mobile & Address</DialogTitle>
                 </DialogHeader>
 
                 {isLoading ? (
@@ -110,40 +108,25 @@ export function EditProfileDialog({ open, onOpenChange }: EditProfileDialogProps
                 ) : (
                     <div className="space-y-6 py-4">
                         <div className="space-y-4">
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 gap-4">
                                 <div className="space-y-2">
                                     <Label htmlFor="phone">Phone Number</Label>
                                     <Input id="phone" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+91..." />
                                 </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="landSize">Land Size (Acres)</Label>
-                                    <Input id="landSize" type="number" value={landSize} onChange={(e) => setLandSize(e.target.value)} placeholder="e.g. 5" />
-                                </div>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <Label htmlFor="soilType">Soil Type</Label>
-                                    <Select value={soilType} onValueChange={setSoilType}>
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Select soil type" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="loamy">Loamy</SelectItem>
-                                            <SelectItem value="clay">Clay</SelectItem>
-                                            <SelectItem value="sandy">Sandy</SelectItem>
-                                            <SelectItem value="black">Black Soil</SelectItem>
-                                            <SelectItem value="red">Red Soil</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                {role !== "farmer" && (
+                            {role !== "farmer" && (
+                                <>
                                     <div className="space-y-2">
-                                        <Label htmlFor="locationName">Location (Text)</Label>
+                                        <Label htmlFor="locationName">Address / Location</Label>
                                         <Input id="locationName" value={locationName} onChange={(e) => setLocationName(e.target.value)} placeholder="City, State" />
                                     </div>
-                                )}
-                            </div>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="landmark">Landmark</Label>
+                                        <Input id="landmark" value={landmark} onChange={(e) => setLandmark(e.target.value)} placeholder="Near temple / school / main road" />
+                                    </div>
+                                </>
+                            )}
 
                             {role === "farmer" && (
                                 <>
@@ -258,6 +241,10 @@ export function EditProfileDialog({ open, onOpenChange }: EditProfileDialogProps
                                             <Label htmlFor="gatNumber">Gat Number</Label>
                                             <Input id="gatNumber" value={gatNumber} onChange={(e) => setGatNumber(e.target.value)} placeholder="e.g. 56" />
                                         </div>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="farmerLandmark">Landmark</Label>
+                                        <Input id="farmerLandmark" value={landmark} onChange={(e) => setLandmark(e.target.value)} placeholder="Near temple / school / main road" />
                                     </div>
                                 </>
                             )}

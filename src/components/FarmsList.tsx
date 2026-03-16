@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { Farm } from "@/lib/api/farms";
-import { useCreateFarm } from "@/hooks/useFarms";
+import { useCreateFarm, useDeleteFarm, useUpdateFarm } from "@/hooks/useFarms";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Plus, Loader2 } from "lucide-react";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
+import { Plus, Loader2, Edit2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useIndianLocations } from "@/hooks/useIndianLocations";
 
@@ -18,8 +19,8 @@ interface FarmListProps {
 
 export const FarmsList = ({ profileId, farms, isLoading }: FarmListProps) => {
     const [showAddDialog, setShowAddDialog] = useState(false);
-    const [selectedFarm, setSelectedFarm] = useState<Farm | null>(null);
-    const [showDetailModal, setShowDetailModal] = useState(false);
+    const [showEditDialog, setShowEditDialog] = useState(false);
+    const [editingFarm, setEditingFarm] = useState<Farm | null>(null);
 
     const [farmName, setFarmName] = useState("");
     const [farmState, setFarmState] = useState("");
@@ -35,6 +36,8 @@ export const FarmsList = ({ profileId, farms, isLoading }: FarmListProps) => {
     const { states, districts, subDistricts, villages, isLoading: locationsLoading } = useIndianLocations(farmState, farmDistrict, farmSubDistrict);
 
     const createMutation = useCreateFarm();
+    const updateMutation = useUpdateFarm();
+    const deleteMutation = useDeleteFarm();
 
     const resetForm = () => {
         setFarmName("");
@@ -47,6 +50,19 @@ export const FarmsList = ({ profileId, farms, isLoading }: FarmListProps) => {
         setFarmLandSize("");
         setFarmSoilType("");
         setFarmFarmingType("");
+    };
+
+    const fillFormFromFarm = (farm: Farm) => {
+        setFarmName(farm.farm_name || "");
+        setFarmState(farm.state || "");
+        setFarmDistrict(farm.district || "");
+        setFarmSubDistrict(farm.taluka || "");
+        setFarmVillageCity(farm.village_city || "");
+        setFarmSurveyNumber(farm.survey_number || "");
+        setFarmGatNumber(farm.gat_number || "");
+        setFarmLandSize(farm.land_size_acres?.toString() || "");
+        setFarmSoilType(farm.soil_type || "");
+        setFarmFarmingType(farm.farming_type || "");
     };
 
     const handleAddFarm = async () => {
@@ -83,6 +99,62 @@ export const FarmsList = ({ profileId, farms, isLoading }: FarmListProps) => {
         }
     };
 
+    const handleStartEdit = (farm: Farm) => {
+        setEditingFarm(farm);
+        fillFormFromFarm(farm);
+        setShowEditDialog(true);
+    };
+
+    const handleUpdateFarm = async () => {
+        if (!editingFarm) return;
+
+        if (!farmName.trim()) {
+            toast.error("Farm name is required");
+            return;
+        }
+        if (!farmState || !farmDistrict || !farmSubDistrict) {
+            toast.error("State, district, and sub-district are required");
+            return;
+        }
+
+        try {
+            await updateMutation.mutateAsync({
+                farmId: editingFarm.id,
+                updates: {
+                    farm_name: farmName,
+                    state: farmState,
+                    district: farmDistrict,
+                    taluka: farmSubDistrict,
+                    village_city: farmVillageCity || undefined,
+                    survey_number: farmSurveyNumber || undefined,
+                    gat_number: farmGatNumber || undefined,
+                    land_size_acres: farmLandSize ? parseFloat(farmLandSize) : undefined,
+                    soil_type: farmSoilType || undefined,
+                    farming_type: farmFarmingType || undefined,
+                },
+            });
+
+            toast.success("Farm updated successfully");
+            setShowEditDialog(false);
+            setEditingFarm(null);
+            resetForm();
+        } catch (error: unknown) {
+            toast.error(error instanceof Error ? error.message : "Failed to update farm");
+        }
+    };
+
+    const handleDeleteFarm = async (farmId: string) => {
+        const confirmed = window.confirm("Delete this farm?");
+        if (!confirmed) return;
+
+        try {
+            await deleteMutation.mutateAsync(farmId);
+            toast.success("Farm deleted");
+        } catch (error: unknown) {
+            toast.error(error instanceof Error ? error.message : "Failed to delete farm");
+        }
+    };
+
     if (isLoading) {
         return (
             <div className="flex justify-center p-8">
@@ -106,30 +178,58 @@ export const FarmsList = ({ profileId, farms, isLoading }: FarmListProps) => {
                     No farms added yet. Click "Add Farm" to get started.
                 </div>
             ) : (
-                <div className="space-y-2">
+                <div className="grid grid-cols-2 md:grid-cols-2 gap-3">
                     {farms.map((farm) => (
-                        <div
-                            key={farm.id}
-                            className="p-4 border rounded-lg hover:bg-accent cursor-pointer transition-colors"
-                            onClick={() => {
-                                setSelectedFarm(farm);
-                                setShowDetailModal(true);
-                            }}
-                            onMouseEnter={() => {
-                                setSelectedFarm(farm);
-                                setShowDetailModal(true);
-                            }}
-                        >
-                            <div className="flex justify-between items-center">
-                                <div>
-                                    <h3 className="font-semibold">{farm.farm_name}</h3>
-                                    <p className="text-sm text-muted-foreground">
-                                        {farm.district}, {farm.state}
-                                    </p>
+                        <HoverCard key={farm.id} openDelay={120} closeDelay={120}>
+                            <HoverCardTrigger asChild>
+                                <div className="relative p-3 md:p-4 border rounded-lg hover:bg-accent cursor-default transition-colors">
+                                    <div className="pr-14">
+                                        <h3 className="font-semibold text-sm md:text-base truncate">{farm.farm_name}</h3>
+                                        <p className="text-xs md:text-sm text-muted-foreground truncate">
+                                            {farm.district}, {farm.state}
+                                        </p>
+                                    </div>
+                                    <div className="absolute top-2 right-2 flex items-center gap-1">
+                                        <Button
+                                            size="icon"
+                                            variant="ghost"
+                                            className="h-7 w-7"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleStartEdit(farm);
+                                            }}
+                                        >
+                                            <Edit2 className="h-3.5 w-3.5" />
+                                        </Button>
+                                        <Button
+                                            size="icon"
+                                            variant="ghost"
+                                            className="h-7 w-7 text-destructive"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                void handleDeleteFarm(farm.id);
+                                            }}
+                                        >
+                                            <Trash2 className="h-3.5 w-3.5" />
+                                        </Button>
+                                    </div>
                                 </div>
-                                <ChevronRight className="h-5 w-5 text-muted-foreground" />
-                            </div>
-                        </div>
+                            </HoverCardTrigger>
+                            <HoverCardContent align="start" className="w-80">
+                                <div className="space-y-2">
+                                    <p className="font-semibold">{farm.farm_name}</p>
+                                    <div className="text-sm text-muted-foreground">
+                                        <p>{farm.village_city || "-"}, {farm.taluka || "-"}</p>
+                                        <p>{farm.district}, {farm.state}</p>
+                                    </div>
+                                    {!!farm.survey_number && <p className="text-sm">Survey: {farm.survey_number}</p>}
+                                    {!!farm.gat_number && <p className="text-sm">Gat: {farm.gat_number}</p>}
+                                    {!!farm.land_size_acres && <p className="text-sm">Land: {farm.land_size_acres} acres</p>}
+                                    {!!farm.soil_type && <p className="text-sm">Soil: {farm.soil_type}</p>}
+                                    {!!farm.farming_type && <p className="text-sm">Farming: {farm.farming_type}</p>}
+                                </div>
+                            </HoverCardContent>
+                        </HoverCard>
                     ))}
                 </div>
             )}
@@ -305,83 +405,133 @@ export const FarmsList = ({ profileId, farms, isLoading }: FarmListProps) => {
                 </DialogContent>
             </Dialog>
 
-            {/* Farm Details Modal - Shows on hover/click */}
-            {selectedFarm && (
-                <Dialog open={showDetailModal} onOpenChange={setShowDetailModal}>
-                    <DialogContent className="sm:max-w-md">
-                        <DialogHeader>
-                            <DialogTitle>{selectedFarm.farm_name}</DialogTitle>
-                        </DialogHeader>
+            {/* Edit Farm Dialog */}
+            <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+                <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle>Edit Farm</DialogTitle>
+                    </DialogHeader>
 
-                        <div className="space-y-3">
-                            <div>
-                                <p className="text-sm font-medium text-muted-foreground">Location</p>
-                                <p className="text-sm">{selectedFarm.village_city}, {selectedFarm.taluka}</p>
-                                <p className="text-sm">{selectedFarm.district}, {selectedFarm.state}</p>
-                            </div>
-
-                            {selectedFarm.survey_number && (
-                                <div>
-                                    <p className="text-sm font-medium text-muted-foreground">Survey Number</p>
-                                    <p className="text-sm">{selectedFarm.survey_number}</p>
-                                </div>
-                            )}
-
-                            {selectedFarm.gat_number && (
-                                <div>
-                                    <p className="text-sm font-medium text-muted-foreground">Gat Number</p>
-                                    <p className="text-sm">{selectedFarm.gat_number}</p>
-                                </div>
-                            )}
-
-                            {selectedFarm.land_size_acres && (
-                                <div>
-                                    <p className="text-sm font-medium text-muted-foreground">Land Size</p>
-                                    <p className="text-sm">{selectedFarm.land_size_acres} acres</p>
-                                </div>
-                            )}
-
-                            {selectedFarm.soil_type && (
-                                <div>
-                                    <p className="text-sm font-medium text-muted-foreground">Soil Type</p>
-                                    <p className="text-sm">{selectedFarm.soil_type}</p>
-                                </div>
-                            )}
-
-                            {selectedFarm.farming_type && (
-                                <div>
-                                    <p className="text-sm font-medium text-muted-foreground">Farming Type</p>
-                                    <p className="text-sm">{selectedFarm.farming_type}</p>
-                                </div>
-                            )}
+                    <div className="space-y-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="editFarmName">Farm Name <span className="text-red-500">*</span></Label>
+                            <Input
+                                id="editFarmName"
+                                value={farmName}
+                                onChange={(e) => setFarmName(e.target.value)}
+                                placeholder="e.g. North Field"
+                            />
                         </div>
 
-                        <DialogFooter>
-                            <Button variant="outline" onClick={() => setShowDetailModal(false)}>
-                                Close
-                            </Button>
-                        </DialogFooter>
-                    </DialogContent>
-                </Dialog>
-            )}
+                        <div className="space-y-2">
+                            <Label htmlFor="editState">State <span className="text-red-500">*</span></Label>
+                            <Select
+                                value={farmState}
+                                onValueChange={(v) => { setFarmState(v); setFarmDistrict(""); setFarmSubDistrict(""); setFarmVillageCity(""); }}
+                                disabled={locationsLoading}
+                            >
+                                <SelectTrigger id="editState">
+                                    <SelectValue placeholder="Select state" />
+                                </SelectTrigger>
+                                <SelectContent className="max-h-60">
+                                    {states.map(s => (
+                                        <SelectItem key={s} value={s}>{s}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label htmlFor="editDistrict">District <span className="text-red-500">*</span></Label>
+                            <Select
+                                value={farmDistrict}
+                                onValueChange={(v) => { setFarmDistrict(v); setFarmSubDistrict(""); setFarmVillageCity(""); }}
+                                disabled={!farmState || districts.length === 0 || locationsLoading}
+                            >
+                                <SelectTrigger id="editDistrict">
+                                    <SelectValue placeholder="Select district" />
+                                </SelectTrigger>
+                                <SelectContent className="max-h-60">
+                                    {districts.map(d => (
+                                        <SelectItem key={d} value={d}>{d}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label htmlFor="editSubDistrict">Sub-District (Taluka) <span className="text-red-500">*</span></Label>
+                            <Select
+                                value={farmSubDistrict}
+                                onValueChange={(v) => { setFarmSubDistrict(v); setFarmVillageCity(""); }}
+                                disabled={!farmDistrict || subDistricts.length === 0 || locationsLoading}
+                            >
+                                <SelectTrigger id="editSubDistrict">
+                                    <SelectValue placeholder="Select sub-district" />
+                                </SelectTrigger>
+                                <SelectContent className="max-h-60">
+                                    {subDistricts.map(sd => (
+                                        <SelectItem key={sd} value={sd}>{sd}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label htmlFor="editVillageCity">Village / City</Label>
+                            <Select
+                                value={farmVillageCity}
+                                onValueChange={setFarmVillageCity}
+                                disabled={!farmSubDistrict || villages.length === 0 || locationsLoading}
+                            >
+                                <SelectTrigger id="editVillageCity">
+                                    <SelectValue placeholder="Select village" />
+                                </SelectTrigger>
+                                <SelectContent className="max-h-60">
+                                    {villages.map(v => (
+                                        <SelectItem key={v} value={v}>{v}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label htmlFor="editSurveyNumber">Survey Number</Label>
+                            <Input id="editSurveyNumber" value={farmSurveyNumber} onChange={(e) => setFarmSurveyNumber(e.target.value)} />
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label htmlFor="editGatNumber">Gat Number</Label>
+                            <Input id="editGatNumber" value={farmGatNumber} onChange={(e) => setFarmGatNumber(e.target.value)} />
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label htmlFor="editLandSize">Land Size (Acres)</Label>
+                            <Input id="editLandSize" type="number" value={farmLandSize} onChange={(e) => setFarmLandSize(e.target.value)} />
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label htmlFor="editSoilType">Soil Type</Label>
+                            <Input id="editSoilType" value={farmSoilType} onChange={(e) => setFarmSoilType(e.target.value)} />
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label htmlFor="editFarmingType">Farming Type</Label>
+                            <Input id="editFarmingType" value={farmFarmingType} onChange={(e) => setFarmFarmingType(e.target.value)} />
+                        </div>
+                    </div>
+
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setShowEditDialog(false)} disabled={updateMutation.isPending}>
+                            Cancel
+                        </Button>
+                        <Button onClick={handleUpdateFarm} disabled={updateMutation.isPending}>
+                            {updateMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                            Save Changes
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </section>
     );
 };
-
-// Simple ChevronRight icon
-function ChevronRight({ className }: { className: string }) {
-    return (
-        <svg
-            className={className}
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-        >
-            <polyline points="9 18 15 12 9 6"></polyline>
-        </svg>
-    );
-}

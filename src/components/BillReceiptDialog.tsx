@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -166,18 +166,6 @@ const normalizeBillData = (raw: RawBillInput | BillData | null | undefined): Bil
   const buildAddressFromParts = (parts: Array<string | undefined>) =>
     parts.filter(Boolean).join(", ");
   
-  // Helper to extract city (district or village_city)
-  const extractCity = (profileData: any) => {
-    const district = profileData?.district;
-    const villageCity = profileData?.village_city;
-    return district ? String(district) : (villageCity ? String(villageCity) : undefined);
-  };
-
-  // Helper to extract state
-  const extractState = (profileData: any) => {
-    return profileData?.state ? String(profileData.state) : undefined;
-  };
-
   const buyerDistrict = pickPartyField(buyerSources, ["district"]);
   const buyerTaluka = pickPartyField(buyerSources, ["taluka"]);
   const buyerVillageCity = pickPartyField(buyerSources, ["village_city", "city"]);
@@ -306,7 +294,7 @@ const partyAddressLine = (p: BillParty): string => {
     .split(",")
     .map((x) => x.trim())
     .filter(Boolean);
-  const structuredParts = [p.village_city, p.taluka, p.city, p.state, p.zipCode]
+  const structuredParts = [p.village_city, p.taluka, p.district, p.city, p.state, p.zipCode]
     .map((x) => (x ? String(x).trim() : ""))
     .filter(Boolean);
 
@@ -699,7 +687,10 @@ export const BillReceiptDialog = ({
   isLoading,
   canMarkPaid,
 }: BillReceiptDialogProps) => {
-  const normalizedData = normalizeBillData(data ?? billData ?? billDetails);
+  const normalizedData = useMemo(
+    () => normalizeBillData(data ?? billData ?? billDetails),
+    [data, billData, billDetails]
+  );
   if (!normalizedData) return null;
 
   const resolvedOpen = open ?? isOpen ?? false;
@@ -779,7 +770,7 @@ export const BillReceiptDialog = ({
 
   return (
     <Dialog open={resolvedOpen} onOpenChange={resolvedOnOpenChange}>
-      <DialogContent className="w-[95vw] max-w-4xl max-h-[90vh] overflow-y-auto bg-gray-50 p-0">
+      <DialogContent className="w-[98vw] max-w-4xl max-h-[90vh] overflow-y-auto bg-gray-50 p-0">
         {/* ── Dialog header ── */}
         <DialogHeader className="px-6 pt-5 pb-0 print:hidden">
           <DialogTitle className="flex items-center gap-2.5 text-xl font-bold text-green-900">
@@ -838,15 +829,15 @@ export const BillReceiptDialog = ({
             ))}
           </div>
 
-          <div className="p-6 space-y-6">
+          <div className="p-4 sm:p-6 space-y-5 sm:space-y-6">
             {/* ── Party cards ── */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               <PartyCard party={normalizedData.seller} label="Seller" />
               <PartyCard party={normalizedData.buyer} label="Buyer" />
             </div>
 
             {/* ── Transaction meta chips ── */}
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
               <MetaChip label="Transaction Type" value={normalizedData.transactionType} />
               <MetaChip label="Payment Method" value={normalizedData.paymentMethod ?? "N/A"} />
               <MetaChip label="Order Status" value={String(normalizedData.status).charAt(0).toUpperCase() + String(normalizedData.status).slice(1)} />
@@ -862,7 +853,7 @@ export const BillReceiptDialog = ({
 
             {/* ── Line items table ── */}
             <div className="rounded-xl overflow-hidden border border-gray-100">
-              <table className="w-full text-left border-collapse text-sm">
+              <table className="w-full text-left border-collapse text-xs sm:text-sm">
                 <thead>
                   <tr className="bg-green-900 text-white">
                     <th className="px-4 py-3 font-semibold text-xs tracking-wider uppercase text-green-200">Description</th>
@@ -939,12 +930,12 @@ export const BillReceiptDialog = ({
         </div>
 
         {/* ── Action buttons ── */}
-        <div className="flex flex-wrap justify-end gap-2 px-6 pb-5 print:hidden">
-          <Button variant="outline" size="sm" onClick={handleDownloadPdf} className="border-green-200 text-green-800 hover:bg-green-50">
+        <div className="flex flex-col sm:flex-row sm:flex-wrap sm:justify-end gap-2 px-4 sm:px-6 pb-5 print:hidden">
+          <Button variant="outline" size="sm" onClick={handleDownloadPdf} className="w-full sm:w-auto border-green-200 text-green-800 hover:bg-green-50">
             <Download className="mr-2 h-4 w-4" /> Download Bill PDF
           </Button>
 
-          <Button size="sm" onClick={handlePrintPdf} className="bg-green-700 hover:bg-green-800 text-white">
+          <Button size="sm" onClick={handlePrintPdf} className="w-full sm:w-auto bg-green-700 hover:bg-green-800 text-white">
             <Printer className="mr-2 h-4 w-4" /> Print Bill
           </Button>
 
@@ -953,7 +944,7 @@ export const BillReceiptDialog = ({
               size="sm"
               onClick={resolvedOnMarkPaid}
               disabled={resolvedIsLoading}
-              className="bg-green-700 hover:bg-green-800 text-white"
+              className="w-full sm:w-auto bg-green-700 hover:bg-green-800 text-white"
             >
               <CheckCircle className="mr-2 h-4 w-4" />
               {resolvedIsLoading ? "Processing…" : "Confirm Payment & Mark Paid"}
@@ -961,7 +952,7 @@ export const BillReceiptDialog = ({
           )}
 
           {isPaid && (
-            <Button disabled variant="secondary" size="sm" className="bg-green-50 text-green-700 border border-green-200 opacity-100 cursor-default">
+            <Button disabled variant="secondary" size="sm" className="w-full sm:w-auto bg-green-50 text-green-700 border border-green-200 opacity-100 cursor-default">
               <CheckCircle className="mr-2 h-4 w-4" />
               Payment Completed
             </Button>

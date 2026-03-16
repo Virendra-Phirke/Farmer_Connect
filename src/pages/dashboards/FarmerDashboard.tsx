@@ -40,20 +40,20 @@ const FarmerDashboard = () => {
 
     return (
         <DashboardLayout subtitle="Manage your farm, sell crops, rent equipment, and grow your profits.">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 md:gap-6">
                 {cards.map((card) => (
                     <div
                         key={card.title}
                         onClick={() => navigate(card.path)}
-                        className="group bg-card rounded-xl p-8 border border-border hover:shadow-lg hover:-translate-y-1 transition-all duration-300 cursor-pointer relative"
+                        className="group bg-card rounded-lg sm:rounded-xl p-3 sm:p-5 md:p-8 border border-border hover:shadow-lg hover:-translate-y-1 transition-all duration-300 cursor-pointer relative min-h-[148px] sm:min-h-[190px]"
                     >
-                        <div className="w-14 h-14 rounded-lg bg-primary/10 flex items-center justify-center mb-6 group-hover:bg-primary/20 transition-colors">
-                            <card.icon className="h-7 w-7 text-primary" />
+                        <div className="w-9 h-9 sm:w-12 sm:h-12 md:w-14 md:h-14 rounded-lg bg-primary/10 flex items-center justify-center mb-2 sm:mb-4 md:mb-6 group-hover:bg-primary/20 transition-colors">
+                            <card.icon className="h-4 w-4 sm:h-6 sm:w-6 md:h-7 md:w-7 text-primary" />
                         </div>
-                        <h3 className="font-display text-xl font-semibold text-foreground mb-2">{card.title}</h3>
-                        <p className="text-muted-foreground">{card.description}</p>
+                        <h3 className="font-display text-sm sm:text-lg md:text-xl font-semibold text-foreground mb-1 sm:mb-2 leading-snug">{card.title}</h3>
+                        <p className="hidden sm:block text-xs md:text-sm text-muted-foreground">{card.description}</p>
                         {card.stat && (
-                            <div className="absolute top-8 right-8 bg-primary/10 text-primary px-3 py-1 rounded-full text-xs font-semibold">
+                            <div className="absolute top-3 right-3 sm:top-5 sm:right-5 md:top-8 md:right-8 bg-primary/10 text-primary px-2 py-0.5 sm:px-3 sm:py-1 rounded-full text-[10px] sm:text-xs font-semibold">
                                 {card.stat}
                             </div>
                         )}

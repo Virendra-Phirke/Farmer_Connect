@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useUser } from "@clerk/clerk-react";
-import { getProfileId } from "@/lib/supabase-auth";
+import { getProfileId, getUserProfile, updateUserProfile } from "@/lib/supabase-auth";
 import { useEquipmentListings, useCreateEquipmentListing, useDeleteEquipmentListing, useUpdateEquipmentListing } from "@/hooks/useEquipmentListings";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
@@ -38,16 +38,36 @@ const MyEquipmentPage = () => {
     const [description, setDescription] = useState("");
     const [searchQuery, setSearchQuery] = useState("");
 
+    const ensureSellerMobile = async () => {
+        if (!user?.id) return false;
+
+        const existing = await getUserProfile(user.id);
+        if (existing?.phone) return true;
+
+        const clerkPhone = user.phoneNumbers?.[0]?.phoneNumber;
+        if (clerkPhone) {
+            await updateUserProfile(user.id, { phone: clerkPhone });
+            return true;
+        }
+
+        toast.error("Add your mobile number in Profile first to list equipment.");
+        return false;
+    };
+
     const filteredEquipment = equipment?.filter((item: any) =>
         item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         item.category.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
-    const handleCreate = () => {
+    const handleCreate = async () => {
         if (!profileId || !name || !category || !pricePerDay || !location || !quantity) {
             toast.error("Please fill all required fields");
             return;
         }
+
+        const hasMobile = await ensureSellerMobile();
+        if (!hasMobile) return;
+
         createMutation.mutate(
             { owner_id: profileId, name, category, price_per_day: parseFloat(pricePerDay), location, description, quantity: parseInt(quantity), image_url: null },
             {
@@ -68,11 +88,15 @@ const MyEquipmentPage = () => {
         setShowEdit(true);
     };
 
-    const handleUpdate = () => {
+    const handleUpdate = async () => {
         if (!editingItem || !name || !category || !pricePerDay || !location || !quantity) {
             toast.error("Please fill all required fields");
             return;
         }
+
+        const hasMobile = await ensureSellerMobile();
+        if (!hasMobile) return;
+
         const quantityNum = parseInt(quantity);
         updateMutation.mutate(
             { 
@@ -110,7 +134,22 @@ const MyEquipmentPage = () => {
                     <h2 className="text-xl font-bold">My Equipment</h2>
                     <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
                         <SearchBar placeholder="Search equipment..." onSearch={setSearchQuery} />
-                        <Button onClick={() => { setShowCreate(true); setName(""); setCategory(""); setPricePerDay(""); setQuantity(""); setLocation(""); setDescription(""); }} className="whitespace-nowrap"><Plus className="mr-2 h-4 w-4" /> List Equipment</Button>
+                        <Button
+                            onClick={async () => {
+                                const hasMobile = await ensureSellerMobile();
+                                if (!hasMobile) return;
+                                setShowCreate(true);
+                                setName("");
+                                setCategory("");
+                                setPricePerDay("");
+                                setQuantity("");
+                                setLocation("");
+                                setDescription("");
+                            }}
+                            className="whitespace-nowrap"
+                        >
+                            <Plus className="mr-2 h-4 w-4" /> List Equipment
+                        </Button>
                     </div>
                 </div>
 
@@ -121,25 +160,25 @@ const MyEquipmentPage = () => {
                         {searchQuery ? "No equipment matches your search." : "No equipment listed yet. Click \"List Equipment\" to add your first one."}
                     </div>
                 ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-6">
                         {filteredEquipment.map((item: any) => {
                             const isUnavailable = item.quantity === 0;
                             return (
-                                <div key={item.id} className="bg-card rounded-xl border border-border p-6 relative">
-                                    <div className="flex items-center gap-3 mb-3">
-                                        <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center"><Tractor className="h-5 w-5 text-accent" /></div>
+                                <div key={item.id} className="bg-card rounded-xl border border-border p-3 md:p-6 relative">
+                                    <div className="flex items-center gap-2 md:gap-3 mb-2 md:mb-3">
+                                        <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-accent/10 flex items-center justify-center"><Tractor className="h-4 w-4 md:h-5 md:w-5 text-accent" /></div>
                                         <div>
-                                            <h3 className="font-semibold">{item.name}</h3>
-                                            <span className="text-xs text-muted-foreground capitalize">{item.category}</span>
+                                            <h3 className="font-semibold text-sm md:text-base leading-tight">{item.name}</h3>
+                                            <span className="text-[11px] md:text-xs text-muted-foreground capitalize">{item.category}</span>
                                         </div>
                                     </div>
-                                    <p className="text-sm mb-1">₹{item.price_per_day}/day</p>
-                                    <p className="text-sm text-muted-foreground mb-2">📍 {item.location}</p>
-                                    <div className="flex items-center gap-2 text-sm mb-3">
+                                    <p className="text-xs md:text-sm mb-1">₹{item.price_per_day}/day</p>
+                                    <p className="text-xs md:text-sm text-muted-foreground mb-2 truncate">📍 {item.location}</p>
+                                    <div className="flex items-center gap-1 md:gap-2 text-xs md:text-sm mb-1 md:mb-3">
                                         <span className={isUnavailable ? "text-red-500 font-semibold" : "text-green-600 font-semibold"}>{isUnavailable ? "Unavailable" : "Available"}</span>
                                         <span className="text-muted-foreground">• Qty: {item.quantity}</span>
                                     </div>
-                                    <div className="absolute top-4 right-4 flex gap-2">
+                                    <div className="absolute top-2 right-2 md:top-4 md:right-4 flex gap-1 md:gap-2">
                                         <Button variant="ghost" size="icon" className="text-primary" onClick={() => handleEdit(item)}><Edit2 className="h-4 w-4" /></Button>
                                         <Button variant="ghost" size="icon" className="text-destructive" onClick={() => deleteMutation.mutate(item.id, { onSuccess: () => toast.success("Deleted"), onError: () => toast.error("Failed") })}><Trash2 className="h-4 w-4" /></Button>
                                     </div>

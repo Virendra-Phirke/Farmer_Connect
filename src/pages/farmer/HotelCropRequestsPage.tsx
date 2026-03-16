@@ -1,13 +1,13 @@
 import DashboardLayout from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
-    import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useOpenCropRequirements } from "@/hooks/useCropRequirements";
 import { useCreateSupplyContract } from "@/hooks/useSupplyContracts";
 import { useUser } from "@clerk/clerk-react";
 import { useEffect, useState } from "react";
 import { getProfileId } from "@/lib/supabase-auth";
-import { Loader2, ArrowRight } from "lucide-react";
+import { Loader2, ArrowRight, CheckCircle } from "lucide-react";
 import { toast } from "sonner";
 
 export default function HotelCropRequestsPage() {
@@ -15,6 +15,7 @@ export default function HotelCropRequestsPage() {
     const [profileId, setProfileId] = useState<string | null>(null);
     const [selectedReq, setSelectedReq] = useState<any>(null);
     const [proposedPrice, setProposedPrice] = useState("");
+    const [confirmedProposal, setConfirmedProposal] = useState<any>(null);
 
     useEffect(() => {
         if (user?.id) {
@@ -47,16 +48,29 @@ export default function HotelCropRequestsPage() {
             end_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
             price_per_kg: price,
             payment_status: "unpaid",
-            billing_id: null,
             status: "pending"
         }, {
-            onSuccess: () => {
-                toast.success(`Sent supply proposal to ${selectedReq.hotel?.full_name || "hotel"} for ${selectedReq.quantity_kg}kg of ${selectedReq.crop_name} @ ₹${price}/kg!`);
+            onSuccess: (data) => {
+                // Show notification
+                toast.success(`Supply proposal sent to ${selectedReq.hotel?.full_name || 'Hotel'} for ${selectedReq.crop_name}`);
+                
+                // Show confirmation bill
+                setConfirmedProposal({
+                    proposalId: data.id,
+                    cropName: selectedReq.crop_name,
+                    hotelName: selectedReq.hotel?.full_name || "Hotel",
+                    quantity: selectedReq.quantity_kg,
+                    pricePerKg: price,
+                    totalPerDelivery: price * selectedReq.quantity_kg,
+                    frequency: "weekly",
+                    startDate: new Date().toLocaleDateString(),
+                    endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString(),
+                });
                 setSelectedReq(null);
                 setProposedPrice("");
             },
-            onError: () => {
-                toast.error("Failed to send supply proposal. Please try again.");
+            onError: (error: any) => {
+                toast.error(error?.message || "Failed to send supply proposal. Please try again.");
             }
         });
     };
@@ -157,6 +171,68 @@ export default function HotelCropRequestsPage() {
                             Send Proposal
                         </Button>
                     </div>
+                </DialogContent>
+            </Dialog>
+
+            {/* Confirmation Bill Dialog - Shows after proposal sent */}
+            <Dialog open={!!confirmedProposal} onOpenChange={(open) => !open && setConfirmedProposal(null)}>
+                <DialogContent className="max-w-md">
+                    <DialogHeader>
+                        <div className="flex items-center gap-2 mb-2">
+                            <CheckCircle className="h-6 w-6 text-green-600" />
+                            <DialogTitle>Proposal Sent Successfully!</DialogTitle>
+                        </div>
+                        <DialogDescription>
+                            Your supply contract proposal has been sent to {confirmedProposal?.hotelName}
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="space-y-4 py-4">
+                        {/* Proposal Summary */}
+                        <div className="bg-green-50 border border-green-200 rounded-lg p-4 space-y-3">
+                            <div className="flex justify-between">
+                                <span className="text-sm text-muted-foreground">Crop</span>
+                                <span className="font-semibold">{confirmedProposal?.cropName}</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-sm text-muted-foreground">Buyer</span>
+                                <span className="font-semibold">{confirmedProposal?.hotelName}</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-sm text-muted-foreground">Quantity/Delivery</span>
+                                <span className="font-semibold">{confirmedProposal?.quantity} kg</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-sm text-muted-foreground">Price/kg</span>
+                                <span className="font-semibold">₹{confirmedProposal?.pricePerKg}</span>
+                            </div>
+                            <div className="border-t border-green-200 pt-3 flex justify-between">
+                                <span className="text-sm font-medium">Total per Delivery</span>
+                                <span className="text-lg font-bold text-green-600">₹{confirmedProposal?.totalPerDelivery.toFixed(2)}</span>
+                            </div>
+                        </div>
+
+                        {/* Contract Details */}
+                        <div className="bg-muted p-4 rounded-lg space-y-2 text-sm">
+                            <p><span className="text-muted-foreground">Frequency:</span> <span className="font-medium capitalize">{confirmedProposal?.frequency}</span></p>
+                            <p><span className="text-muted-foreground">Start Date:</span> <span className="font-medium">{confirmedProposal?.startDate}</span></p>
+                            <p><span className="text-muted-foreground">End Date:</span> <span className="font-medium">{confirmedProposal?.endDate}</span></p>
+                            <p><span className="text-muted-foreground">Status:</span> <span className="font-medium text-yellow-600">Pending Acceptance</span></p>
+                        </div>
+
+                        {/* Info Message */}
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                            <p className="text-sm text-blue-800">
+                                ℹ️ <strong>Next Steps:</strong> The hotel will review your proposal and accept or reject it. You'll receive a notification once they respond.
+                            </p>
+                        </div>
+                    </div>
+
+                    <DialogFooter>
+                        <Button onClick={() => setConfirmedProposal(null)} className="w-full">
+                            Done
+                        </Button>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
         </DashboardLayout>

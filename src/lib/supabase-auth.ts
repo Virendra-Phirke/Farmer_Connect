@@ -16,6 +16,7 @@ export type UserProfile = {
   district: string | null;
   taluka: string | null;
   village_city: string | null;
+  landmark: string | null;
   survey_number: string | null;
   gat_number: string | null;
   avatar_url: string | null;
@@ -24,6 +25,17 @@ export type UserProfile = {
 };
 
 export type UserRole = "farmer" | "equipment_owner" | "hotel_restaurant_manager";
+
+const isMissingColumnError = (error: any, columnName: string) => {
+  const msg = String(error?.message || "").toLowerCase();
+  const details = String(error?.details || "").toLowerCase();
+  return (
+    error?.code === "PGRST204" ||
+    error?.code === "42703" ||
+    msg.includes(columnName.toLowerCase()) ||
+    details.includes(columnName.toLowerCase())
+  );
+};
 
 /**
  * Test if Supabase is reachable. Returns true if connected, false otherwise.
@@ -65,15 +77,21 @@ export async function syncClerkUserToSupabase(clerkUserId: string, userData: {
   }
 
   if (existing) {
+    const updates: Record<string, unknown> = {
+      full_name: userData.full_name || null,
+      email: userData.email || null,
+      avatar_url: userData.avatar_url || null,
+      updated_at: new Date().toISOString(),
+    };
+
+    // IMPORTANT: phone is managed from profile page, do not reset from Clerk sync
+    if (userData.phone_number) {
+      updates.phone = userData.phone_number;
+    }
+
     const { data, error } = await supabase
       .from("profiles")
-      .update({
-        full_name: userData.full_name || null,
-        email: userData.email || null,
-        avatar_url: userData.avatar_url || null,
-        phone: userData.phone_number || null,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updates as any)
       .eq("clerk_user_id", clerkUserId)
       .select()
       .maybeSingle();
@@ -81,15 +99,21 @@ export async function syncClerkUserToSupabase(clerkUserId: string, userData: {
     if (error) throw new Error(`Failed to update profile: ${error.message}`);
     return data;
   } else {
+    const insertPayload: Record<string, unknown> = {
+      clerk_user_id: clerkUserId,
+      full_name: userData.full_name || null,
+      email: userData.email || null,
+      avatar_url: userData.avatar_url || null,
+    };
+
+    // Keep profile phone app-managed; only seed from Clerk if present
+    if (userData.phone_number) {
+      insertPayload.phone = userData.phone_number;
+    }
+
     const { data, error } = await supabase
       .from("profiles")
-      .insert({
-        clerk_user_id: clerkUserId,
-        full_name: userData.full_name || null,
-        email: userData.email || null,
-        avatar_url: userData.avatar_url || null,
-        phone: userData.phone_number || null,
-      })
+      .insert(insertPayload as any)
       .select()
       .single();
 
@@ -106,6 +130,16 @@ export async function setUserRole(clerkUserId: string, role: UserRole) {
     .maybeSingle();
 
   const currentProfileId = await getProfileId(clerkUserId);
+  let profilePhone: string | null = null;
+
+  if (currentProfileId) {
+    const { data: profileData } = await supabase
+      .from("profiles")
+      .select("phone")
+      .eq("id", currentProfileId)
+      .maybeSingle();
+    profilePhone = profileData?.phone || null;
+  }
 
   if (existing) {
     const { data, error } = await supabase
@@ -122,9 +156,21 @@ export async function setUserRole(clerkUserId: string, role: UserRole) {
       if (role === 'farmer') {
         await (supabase as any).from("farmer_profiles").upsert({ profile_id: currentProfileId }, { onConflict: "profile_id" });
       } else if (role === 'equipment_owner') {
-        await (supabase as any).from("equipment_owner_profiles").upsert({ profile_id: currentProfileId }, { onConflict: "profile_id" });
+        const payload: any = { profile_id: currentProfileId, mobile_number: profilePhone };
+        const { error: upsertError } = await (supabase as any).from("equipment_owner_profiles").upsert(payload, { onConflict: "profile_id" });
+        if (upsertError && isMissingColumnError(upsertError, "mobile_number")) {
+          await (supabase as any).from("equipment_owner_profiles").upsert({ profile_id: currentProfileId }, { onConflict: "profile_id" });
+        } else if (upsertError) {
+          throw upsertError;
+        }
       } else if (role === 'hotel_restaurant_manager') {
-        await (supabase as any).from("buyer_profiles").upsert({ profile_id: currentProfileId }, { onConflict: "profile_id" });
+        const payload: any = { profile_id: currentProfileId, mobile_number: profilePhone };
+        const { error: upsertError } = await (supabase as any).from("buyer_profiles").upsert(payload, { onConflict: "profile_id" });
+        if (upsertError && isMissingColumnError(upsertError, "mobile_number")) {
+          await (supabase as any).from("buyer_profiles").upsert({ profile_id: currentProfileId }, { onConflict: "profile_id" });
+        } else if (upsertError) {
+          throw upsertError;
+        }
       }
     }
 
@@ -143,9 +189,21 @@ export async function setUserRole(clerkUserId: string, role: UserRole) {
       if (role === 'farmer') {
         await (supabase as any).from("farmer_profiles").upsert({ profile_id: currentProfileId }, { onConflict: "profile_id" });
       } else if (role === 'equipment_owner') {
-        await (supabase as any).from("equipment_owner_profiles").upsert({ profile_id: currentProfileId }, { onConflict: "profile_id" });
+        const payload: any = { profile_id: currentProfileId, mobile_number: profilePhone };
+        const { error: upsertError } = await (supabase as any).from("equipment_owner_profiles").upsert(payload, { onConflict: "profile_id" });
+        if (upsertError && isMissingColumnError(upsertError, "mobile_number")) {
+          await (supabase as any).from("equipment_owner_profiles").upsert({ profile_id: currentProfileId }, { onConflict: "profile_id" });
+        } else if (upsertError) {
+          throw upsertError;
+        }
       } else if (role === 'hotel_restaurant_manager') {
-        await (supabase as any).from("buyer_profiles").upsert({ profile_id: currentProfileId }, { onConflict: "profile_id" });
+        const payload: any = { profile_id: currentProfileId, mobile_number: profilePhone };
+        const { error: upsertError } = await (supabase as any).from("buyer_profiles").upsert(payload, { onConflict: "profile_id" });
+        if (upsertError && isMissingColumnError(upsertError, "mobile_number")) {
+          await (supabase as any).from("buyer_profiles").upsert({ profile_id: currentProfileId }, { onConflict: "profile_id" });
+        } else if (upsertError) {
+          throw upsertError;
+        }
       }
     }
 
@@ -165,16 +223,36 @@ export async function getUserRole(clerkUserId: string): Promise<UserRole | null>
 }
 
 export async function getUserProfile(clerkUserId: string): Promise<UserProfile | null> {
-  // We perform a left join to fetch the base profile + potential role profiles
-  const { data, error } = await (supabase as any)
+  // Primary query (new schema)
+  const { data: primaryData, error: primaryError } = await (supabase as any)
     .from("profiles")
     .select(`
       *,
       farmer_profiles(land_size_acres, soil_type, farming_type, available_equipment, state, district, taluka, village_city, survey_number, gat_number),
-      equipment_owner_profiles(available_equipment)
+      equipment_owner_profiles(available_equipment, mobile_number),
+      buyer_profiles(mobile_number)
     `)
     .eq("clerk_user_id", clerkUserId)
     .maybeSingle();
+
+  let data = primaryData;
+  let error = primaryError;
+
+  // Fallback query (old schema without mobile_number columns)
+  if (error && isMissingColumnError(error, "mobile_number")) {
+    const fallback = await (supabase as any)
+      .from("profiles")
+      .select(`
+        *,
+        farmer_profiles(land_size_acres, soil_type, farming_type, available_equipment, state, district, taluka, village_city, survey_number, gat_number),
+        equipment_owner_profiles(available_equipment)
+      `)
+      .eq("clerk_user_id", clerkUserId)
+      .maybeSingle();
+
+    data = fallback.data;
+    error = fallback.error;
+  }
 
   if (error || !data) {
     console.error("Error getting user profile:", error);
@@ -204,6 +282,7 @@ export async function getUserProfile(clerkUserId: string): Promise<UserProfile |
     district: data.district || farmerData?.district || null,
     taluka: data.taluka || farmerData?.taluka || null,
     village_city: data.village_city || farmerData?.village_city || null,
+    landmark: data.landmark || null,
     survey_number: farmerData?.survey_number || null,
     gat_number: farmerData?.gat_number || null,
   };
@@ -233,19 +312,36 @@ export async function updateUserProfile(
   if (updates.district !== undefined) baseUpdates.district = updates.district;
   if (updates.taluka !== undefined) baseUpdates.taluka = updates.taluka;
   if (updates.village_city !== undefined) baseUpdates.village_city = updates.village_city;
+  if (updates.landmark !== undefined) baseUpdates.landmark = updates.landmark;
 
-  const { data: baseData, error: baseError } = await supabase
-    .from("profiles")
-    .update(baseUpdates)
-    .eq("clerk_user_id", clerkUserId)
-    .select()
-    .maybeSingle();
+  let profileId = await getProfileId(clerkUserId);
 
-  if (baseError || !baseData) {
-    throw baseError || new Error("Profile not found");
+  if (!profileId) {
+    const { data: inserted, error: insertError } = await supabase
+      .from("profiles")
+      .insert({
+        clerk_user_id: clerkUserId,
+        ...baseUpdates,
+      })
+      .select("id")
+      .single();
+
+    if (insertError || !inserted?.id) {
+      throw insertError || new Error("Unable to create profile record");
+    }
+
+    profileId = inserted.id;
+  } else {
+    const { error: baseError } = await supabase
+      .from("profiles")
+      .update(baseUpdates)
+      .eq("id", profileId);
+
+    if (baseError) {
+      throw baseError;
+    }
   }
 
-  const profileId = baseData.id;
   const role = await getUserRole(clerkUserId);
 
   // 2. Upsert to the correct role-based table based on the fields sent
@@ -272,8 +368,36 @@ export async function updateUserProfile(
       updated_at: new Date().toISOString(),
     };
     if (updates.available_equipment !== undefined) equipmentOwnerUpdates.available_equipment = updates.available_equipment;
-    
-    await (supabase as any).from("equipment_owner_profiles").upsert(equipmentOwnerUpdates, { onConflict: "profile_id" });
+    if (updates.phone !== undefined) equipmentOwnerUpdates.mobile_number = updates.phone;
+
+    const { error: upsertError } = await (supabase as any).from("equipment_owner_profiles").upsert(equipmentOwnerUpdates, { onConflict: "profile_id" });
+    if (upsertError && isMissingColumnError(upsertError, "mobile_number")) {
+      const fallbackPayload: any = {
+        profile_id: profileId,
+        updated_at: new Date().toISOString(),
+      };
+      if (updates.available_equipment !== undefined) fallbackPayload.available_equipment = updates.available_equipment;
+      await (supabase as any).from("equipment_owner_profiles").upsert(fallbackPayload, { onConflict: "profile_id" });
+    } else if (upsertError) {
+      throw upsertError;
+    }
+  } else if (role === "hotel_restaurant_manager") {
+    const buyerUpdates: any = {
+      profile_id: profileId,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (updates.phone !== undefined) buyerUpdates.mobile_number = updates.phone;
+
+    const { error: upsertError } = await (supabase as any).from("buyer_profiles").upsert(buyerUpdates, { onConflict: "profile_id" });
+    if (upsertError && isMissingColumnError(upsertError, "mobile_number")) {
+      await (supabase as any).from("buyer_profiles").upsert({
+        profile_id: profileId,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "profile_id" });
+    } else if (upsertError) {
+      throw upsertError;
+    }
   }
 
   // Frontend relies on the returned flat data representing the complete updated state.
