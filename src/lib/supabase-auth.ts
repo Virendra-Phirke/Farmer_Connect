@@ -49,6 +49,7 @@ export async function syncClerkUserToSupabase(clerkUserId: string, userData: {
   full_name?: string;
   email?: string;
   avatar_url?: string;
+  phone_number?: string;
 }) {
   const { data: existing, error: fetchError } = await supabase
     .from("profiles")
@@ -70,6 +71,7 @@ export async function syncClerkUserToSupabase(clerkUserId: string, userData: {
         full_name: userData.full_name || null,
         email: userData.email || null,
         avatar_url: userData.avatar_url || null,
+        phone: userData.phone_number || null,
         updated_at: new Date().toISOString(),
       })
       .eq("clerk_user_id", clerkUserId)
@@ -86,6 +88,7 @@ export async function syncClerkUserToSupabase(clerkUserId: string, userData: {
         full_name: userData.full_name || null,
         email: userData.email || null,
         avatar_url: userData.avatar_url || null,
+        phone: userData.phone_number || null,
       })
       .select()
       .single();

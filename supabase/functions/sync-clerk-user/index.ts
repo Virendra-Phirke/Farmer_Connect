@@ -13,7 +13,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { clerk_user_id, full_name, email, avatar_url } = await req.json();
+    const { clerk_user_id, full_name, email, avatar_url, phone_number } = await req.json();
 
     if (!clerk_user_id) {
       return new Response(JSON.stringify({ error: "clerk_user_id required" }), {
@@ -27,11 +27,11 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // Upsert profile
+    // Upsert profile - include phone if provided
     const { data, error } = await supabase
       .from("profiles")
       .upsert(
-        { clerk_user_id, full_name, email, avatar_url },
+        { clerk_user_id, full_name, email, avatar_url, ...(phone_number && { phone: phone_number }) },
         { onConflict: "clerk_user_id" }
       )
       .select()

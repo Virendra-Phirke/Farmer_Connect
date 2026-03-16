@@ -48,6 +48,7 @@ const SelectRole = () => {
         full_name: user.fullName || undefined,
         email: user.primaryEmailAddress?.emailAddress || undefined,
         avatar_url: user.imageUrl || undefined,
+        phone_number: user.phoneNumbers?.[0]?.phoneNumber || undefined,
       });
 
       // Step 2: Set role in Supabase

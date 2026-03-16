@@ -334,11 +334,11 @@ export async function getFarmerPurchaseRequests(farmerId: string) {
         email,
         phone,
         location,
-          state,
-          district,
-          taluka,
-          village_city,
-          avatar_url
+        state,
+        district,
+        taluka,
+        village_city,
+        avatar_url
       ),
       crop_listing:crop_listings!inner(
         id,
