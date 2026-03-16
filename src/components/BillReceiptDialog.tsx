@@ -1,4 +1,5 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useRef } from "react";
+import { useReactToPrint } from "react-to-print";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -691,6 +692,20 @@ export const BillReceiptDialog = ({
     () => normalizeBillData(data ?? billData ?? billDetails),
     [data, billData, billDetails]
   );
+  const printRef = useRef<HTMLDivElement>(null);
+
+  // Using react-to-print for better print handling - must be called before early return
+  const handlePrintWithReactToPrint = useReactToPrint({
+    contentRef: printRef,
+    documentTitle: normalizedData ? `farmdirect-receipt-${(normalizedData.billingId ?? normalizedData.receiptNumber ?? "receipt").toString().replace(/\s+/g, "-")}` : "receipt",
+    onBeforePrint: async () => {
+      console.log("Preparing document for printing...");
+    },
+    onAfterPrint: async () => {
+      console.log("Print dialog closed");
+    },
+  });
+
   if (!normalizedData) return null;
 
   const resolvedOpen = open ?? isOpen ?? false;
@@ -726,44 +741,8 @@ export const BillReceiptDialog = ({
   };
 
   const handlePrintPdf = () => {
-    try {
-      const printable = document.getElementById("printable-bill");
-      const token = (normalizedData.billingId ?? normalizedData.receiptNumber ?? "receipt")
-        .toString().replace(/\s+/g, "-");
-
-      const openPrintWindow = (pdf: jsPDF) => {
-        const blob = pdf.output("blob");
-        const blobUrl = URL.createObjectURL(blob);
-        const printWindow = window.open(blobUrl, "_blank", "width=1000,height=700");
-        if (printWindow && typeof printWindow.print === "function") {
-          setTimeout(() => { try { printWindow.print(); } catch { /* silent */ } }, 500);
-          setTimeout(() => URL.revokeObjectURL(blobUrl), 15000);
-        } else {
-          const link = document.createElement("a");
-          link.href = blobUrl;
-          link.download = `farmdirect-receipt-${token}.pdf`;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
-        }
-      };
-
-      if (printable) {
-        buildPdfFromElement(printable)
-          .then(openPrintWindow)
-          .catch((err) => {
-            console.warn("UI print PDF generation failed, using fallback PDF builder:", err);
-            openPrintWindow(buildPdf(normalizedData));
-          });
-        return;
-      }
-
-      openPrintWindow(buildPdf(normalizedData));
-    } catch (err) {
-      console.error("PDF print failed:", err);
-      alert("Could not generate PDF for printing. Check console for details.");
-    }
+    // Use react-to-print for native browser printing
+    handlePrintWithReactToPrint();
   };
 
   const isPaid = normalizedData.paymentStatus === "paid";
@@ -785,7 +764,7 @@ export const BillReceiptDialog = ({
         </DialogHeader>
 
         {/* ══════════ PRINTABLE BODY ══════════ */}
-        <div id="printable-bill" className="mx-4 mb-4 mt-4 rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden print:mx-0 print:rounded-none print:border-none print:shadow-none">
+        <div ref={printRef} id="printable-bill" className="mx-4 mb-4 mt-4 rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden print:mx-0 print:rounded-none print:border-none print:shadow-none">
 
           {/* Header band */}
           <div className="bg-gradient-to-br from-green-900 via-green-800 to-green-700 px-6 py-5">
