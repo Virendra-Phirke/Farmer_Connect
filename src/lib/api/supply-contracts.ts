@@ -120,17 +120,15 @@ export async function getSupplyContracts(filters?: {
                             .from("profiles")
                             .select(`
                               phone,
-                              farmer_profiles(mobile_number),
                               buyer_profiles(mobile_number),
                               equipment_owner_profiles(mobile_number)
                             `)
                             .eq("id", contract.farmer_id)
                             .maybeSingle();
                         if (freshFarmer && enrichedContract.farmer) {
-                            const farmerRoleData = Array.isArray(freshFarmer.farmer_profiles) ? freshFarmer.farmer_profiles[0] : freshFarmer.farmer_profiles;
                             const buyerRoleData = Array.isArray(freshFarmer.buyer_profiles) ? freshFarmer.buyer_profiles[0] : freshFarmer.buyer_profiles;
                             const equipmentRoleData = Array.isArray(freshFarmer.equipment_owner_profiles) ? freshFarmer.equipment_owner_profiles[0] : freshFarmer.equipment_owner_profiles;
-                            const freshPhone = freshFarmer.phone || farmerRoleData?.mobile_number || buyerRoleData?.mobile_number || equipmentRoleData?.mobile_number;
+                            const freshPhone = freshFarmer.phone || buyerRoleData?.mobile_number || equipmentRoleData?.mobile_number;
                             // Only update if we found a non-null value
                             if (freshPhone) {
                                 enrichedContract.farmer.phone = freshPhone;

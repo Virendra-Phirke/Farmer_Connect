@@ -1,6 +1,5 @@
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Button } from "@/components/ui/button";
 import { Loader2, ShoppingCart, CalendarCheck, FileText, AlertCircle } from "lucide-react";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useState, useEffect } from "react";
@@ -10,6 +9,7 @@ import { usePurchaseRequests, useFarmerPurchaseRequests } from "@/hooks/usePurch
 import { useOwnerBookings, useEquipmentBookings } from "@/hooks/useEquipmentBookings";
 import { useSupplyContracts } from "@/hooks/useSupplyContracts";
 import { useNavigate } from "react-router-dom";
+import { cn } from "@/lib/utils";
 
 interface NotificationCenterProps {
     open: boolean;
@@ -31,7 +31,7 @@ export const NotificationCenter = ({ open, onOpenChange }: NotificationCenterPro
         (role === "farmer" && profileId) ? profileId : "",
         { enabled: role === "farmer" && !!profileId, refetchInterval: 15000 }
     );
-    
+
     // Tool Owners: get pending equipment rentals (incoming)
     const { data: equipmentRequests, isLoading: equipmentRequestsLoading } = useOwnerBookings(
         (role === "equipment_owner" && profileId) ? profileId : "",
@@ -50,7 +50,7 @@ export const NotificationCenter = ({ open, onOpenChange }: NotificationCenterPro
         { enabled: role === "farmer" && !!profileId, refetchInterval: 15000 }
     );
 
-    // Hotels: get incoming supply contracts (incoming)
+    // Hotels: get incoming supply contracts
     const { data: hotelContracts, isLoading: hotelContractsLoading } = useSupplyContracts(
         (role === "hotel_restaurant_manager" && profileId) ? { buyer_id: profileId } : undefined,
         { enabled: role === "hotel_restaurant_manager" && !!profileId, refetchInterval: 15000 }
@@ -62,44 +62,37 @@ export const NotificationCenter = ({ open, onOpenChange }: NotificationCenterPro
         { enabled: role === "farmer" && !!profileId, refetchInterval: 15000 }
     );
 
-    // Calculate pending and history for each role
     const isLoading = cropRequestsLoading || equipmentRequestsLoading || hotelPurchasesLoading || farmerRentalsLoading || hotelContractsLoading || farmerContractsLoading;
 
     const getPendingNotifications = () => {
         if (role === "farmer") {
-            const pending = [
+            return [
                 ...(cropRequests?.filter((r: any) => r.status === "pending") || []),
                 ...(farmerRentals?.filter((r: any) => r.status === "pending" || r.status === "awaiting_confirmation") || []),
                 ...(farmerContracts?.filter((c: any) => c.status === "pending") || []),
             ];
-            return pending;
         } else if (role === "equipment_owner") {
             return (equipmentRequests || []).filter((b: any) => b.status === "pending");
         } else if (role === "hotel_restaurant_manager") {
-            const pending = [
-                ...(hotelContracts?.filter((c: any) => c.status === "pending") || []),
-            ];
-            return pending;
+            return [...(hotelContracts?.filter((c: any) => c.status === "pending") || [])];
         }
         return [];
     };
 
     const getHistoryNotifications = () => {
         if (role === "farmer") {
-            const history = [
+            return [
                 ...(cropRequests?.filter((r: any) => r.status !== "pending") || []),
-                ...(farmerRentals?.filter((r: any) => r.status === "confirmed" || r.status === "cancelled" || r.status === "completed") || []),
-                ...(farmerContracts?.filter((c: any) => c.status === "active" || c.status === "cancelled" || c.status === "completed") || []),
+                ...(farmerRentals?.filter((r: any) => ["confirmed", "cancelled", "completed"].includes(r.status)) || []),
+                ...(farmerContracts?.filter((c: any) => ["active", "cancelled", "completed"].includes(c.status)) || []),
             ];
-            return history;
         } else if (role === "equipment_owner") {
             return (equipmentRequests || []).filter((b: any) => b.status !== "pending");
         } else if (role === "hotel_restaurant_manager") {
-            const history = [
-                ...(hotelPurchases?.filter((r: any) => r.status === "accepted" || r.status === "rejected") || []),
-                ...(hotelContracts?.filter((c: any) => c.status === "active" || c.status === "cancelled" || c.status === "completed") || []),
+            return [
+                ...(hotelPurchases?.filter((r: any) => ["accepted", "rejected"].includes(r.status)) || []),
+                ...(hotelContracts?.filter((c: any) => ["active", "cancelled", "completed"].includes(c.status)) || []),
             ];
-            return history;
         }
         return [];
     };
@@ -116,41 +109,38 @@ export const NotificationCenter = ({ open, onOpenChange }: NotificationCenterPro
 
     const getNotificationPath = (item: any, notificationType: string): string => {
         switch (notificationType) {
-            case "crop":
-                // Farmer receiving crop purchase request from hotel
-                return "/farmer/purchase-requests";
-            case "rental":
-                // Farmer's equipment rental
-                return "/farmer/rental-history";
-            case "equipment":
-                // Equipment owner's rental request
-                return "/equipment/rental-requests";
-            case "contract":
-                // Supply contract
-                return role === "farmer" ? "/farmer/contracts" : "/hotel/contracts";
-            case "purchase":
-                // Purchase request
-                return role === "farmer" ? "/farmer/purchase-requests" : "/hotel/purchase-history";
-            default:
-                return "/";
+            case "crop": return "/farmer/purchase-requests";
+            case "rental": return "/farmer/rental-history";
+            case "equipment": return "/equipment/rental-requests";
+            case "contract": return role === "farmer" ? "/farmer/contracts" : "/hotel/contracts";
+            case "purchase": return role === "farmer" ? "/farmer/purchase-requests" : "/hotel/purchase-history";
+            default: return "/";
         }
     };
 
-    const NotificationItem = ({ item, type, onNavigate }: { item: any; type: "crop" | "rental" | "equipment" | "contract" | "purchase"; onNavigate: () => void }) => {
+    const NotificationItem = ({
+        item,
+        type,
+        onNavigate,
+    }: {
+        item: any;
+        type: "crop" | "rental" | "equipment" | "contract" | "purchase";
+        onNavigate: () => void;
+    }) => {
         const getStatusColor = (status: string) => {
             switch (status) {
                 case "pending":
                 case "awaiting_confirmation":
-                    return "text-yellow-600 bg-yellow-50";
+                    return "text-yellow-700 bg-yellow-100 dark:text-yellow-400 dark:bg-yellow-900/40";
                 case "confirmed":
                 case "accepted":
                 case "active":
-                    return "text-green-600 bg-green-50";
+                    return "text-green-700 bg-green-100 dark:text-green-400 dark:bg-green-900/40";
                 case "cancelled":
                 case "rejected":
-                    return "text-red-600 bg-red-50";
+                    return "text-red-700 bg-red-100 dark:text-red-400 dark:bg-red-900/40";
                 default:
-                    return "text-gray-600 bg-gray-50";
+                    return "text-muted-foreground bg-muted";
             }
         };
 
@@ -165,8 +155,12 @@ export const NotificationCenter = ({ open, onOpenChange }: NotificationCenterPro
                                 <p className="text-xs text-muted-foreground mt-1">
                                     {item.quantity_kg || item.required_quantity_kg} kg @ ₹{item.offered_price || item.price_per_kg}/kg
                                 </p>
-                                <p className="text-xs text-muted-foreground">Total: ₹{(item.quantity_kg || item.required_quantity_kg) * (item.offered_price || item.price_per_kg)}</p>
-                                <p className="text-xs text-muted-foreground mt-1">From: {item.buyer?.full_name || item.hotel?.full_name || "Hotel"}</p>
+                                <p className="text-xs text-muted-foreground">
+                                    Total: ₹{(item.quantity_kg || item.required_quantity_kg) * (item.offered_price || item.price_per_kg)}
+                                </p>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                    From: {item.buyer?.full_name || item.hotel?.full_name || "Hotel"}
+                                </p>
                             </div>
                         </div>
                     );
@@ -187,7 +181,9 @@ export const NotificationCenter = ({ open, onOpenChange }: NotificationCenterPro
                             <CalendarCheck className="h-5 w-5 mt-0.5 flex-shrink-0 text-primary" />
                             <div className="flex-1 min-w-0">
                                 <p className="font-semibold text-sm">Rental Request: {item.equipment?.name || "Equipment"}</p>
-                                <p className="text-xs text-muted-foreground">Qty: {item.quantity || 1} unit{(item.quantity || 1) > 1 ? 's' : ''} @ ₹{item.equipment?.price_per_day || 0}/day</p>
+                                <p className="text-xs text-muted-foreground">
+                                    Qty: {item.quantity || 1} unit{(item.quantity || 1) > 1 ? "s" : ""} @ ₹{item.equipment?.price_per_day || 0}/day
+                                </p>
                                 <p className="text-xs text-muted-foreground">Total: ₹{item.total_price}</p>
                                 <p className="text-xs text-muted-foreground mt-1">{item.start_date} → {item.end_date}</p>
                                 <p className="text-xs text-muted-foreground mt-1">From: {item.renter?.full_name || "Unknown"}</p>
@@ -200,7 +196,9 @@ export const NotificationCenter = ({ open, onOpenChange }: NotificationCenterPro
                             <FileText className="h-5 w-5 mt-0.5 flex-shrink-0 text-primary" />
                             <div className="flex-1 min-w-0">
                                 <p className="font-semibold text-sm">{item.crop_name || "Supply"} Contract</p>
-                                <p className="text-xs text-muted-foreground">{item.quantity_kg_per_delivery} kg @ ₹{item.price_per_kg}/kg</p>
+                                <p className="text-xs text-muted-foreground">
+                                    {item.quantity_kg_per_delivery} kg @ ₹{item.price_per_kg}/kg
+                                </p>
                                 <p className="text-xs text-muted-foreground mt-1">
                                     {item.farmer ? `From: ${item.farmer.full_name}` : item.buyer ? `To: ${item.buyer.full_name}` : ""}
                                 </p>
@@ -226,14 +224,27 @@ export const NotificationCenter = ({ open, onOpenChange }: NotificationCenterPro
         };
 
         return (
-            <div 
-                className="bg-card rounded-lg border border-border p-4 space-y-2 cursor-pointer hover:bg-accent transition-colors"
+            <div
+                className={cn(
+                    // Base
+                    "rounded-lg border border-border p-4 space-y-2 cursor-pointer",
+                    "bg-card text-card-foreground",
+                    // Smooth transition
+                    "transition-colors duration-150",
+                    // Hover: uses theme-aware muted background + slightly more visible border
+                    "hover:bg-muted/60 hover:border-border/80",
+                    "dark:hover:bg-muted/30 dark:hover:border-border/60",
+                    // Active press feedback
+                    "active:scale-[0.99]"
+                )}
                 onClick={onNavigate}
             >
                 {renderContent()}
                 <div className="flex items-center justify-between pt-2">
-                    <span className={`text-xs font-medium px-2 py-1 rounded ${getStatusColor(item.status)}`}>
-                        {item.status?.charAt(0).toUpperCase() + item.status?.slice(1) || "Unknown"}
+                    <span className={cn("text-xs font-medium px-2 py-1 rounded-full", getStatusColor(item.status))}>
+                        {item.status
+                            ? item.status.charAt(0).toUpperCase() + item.status.slice(1).replace(/_/g, " ")
+                            : "Unknown"}
                     </span>
                 </div>
             </div>
@@ -242,8 +253,12 @@ export const NotificationCenter = ({ open, onOpenChange }: NotificationCenterPro
 
     return (
         <Sheet open={open} onOpenChange={onOpenChange}>
-            <SheetContent className="w-full sm:max-w-md">
-                <SheetHeader>
+            {/* 
+              SheetContent is set to flex-col so we can give the tab content area
+              a fixed height and let it scroll independently.
+            */}
+            <SheetContent className="w-full sm:max-w-md flex flex-col h-full overflow-hidden">
+                <SheetHeader className="flex-shrink-0">
                     <SheetTitle>Notifications</SheetTitle>
                 </SheetHeader>
 
@@ -257,15 +272,28 @@ export const NotificationCenter = ({ open, onOpenChange }: NotificationCenterPro
                         <p>No notifications</p>
                     </div>
                 ) : (
-                    <Tabs defaultValue="pending" className="mt-6">
-                        <TabsList className="grid w-full grid-cols-2">
+                    /* 
+                      Tabs wrapper takes remaining height.
+                      TabsContent panels get overflow-y-auto so only the list scrolls,
+                      not the entire sheet — the tab bar stays pinned at the top.
+                    */
+                    <Tabs defaultValue="pending" className="mt-6 flex flex-col flex-1 min-h-0">
+                        {/* Tab bar — never scrolls away */}
+                        <TabsList className="grid w-full grid-cols-2 flex-shrink-0">
                             <TabsTrigger value="pending">Pending ({pending.length})</TabsTrigger>
                             <TabsTrigger value="history">History ({history.length})</TabsTrigger>
                         </TabsList>
 
-                        <TabsContent value="pending" className="space-y-3 mt-4">
+                        {/* Pending tab — scrollable list */}
+                        <TabsContent
+                            value="pending"
+                            className="flex-1 min-h-0 overflow-y-auto mt-4 pr-1 space-y-3
+                                       scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent"
+                        >
                             {pending.length === 0 ? (
-                                <div className="text-center py-8 text-muted-foreground">No pending notifications</div>
+                                <div className="text-center py-8 text-muted-foreground">
+                                    No pending notifications
+                                </div>
                             ) : (
                                 pending.map((item: any) => {
                                     const notificationType = detectNotificationType(item);
@@ -284,9 +312,16 @@ export const NotificationCenter = ({ open, onOpenChange }: NotificationCenterPro
                             )}
                         </TabsContent>
 
-                        <TabsContent value="history" className="space-y-3 mt-4">
+                        {/* History tab — scrollable list */}
+                        <TabsContent
+                            value="history"
+                            className="flex-1 min-h-0 overflow-y-auto mt-4 pr-1 space-y-3
+                                       scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent"
+                        >
                             {history.length === 0 ? (
-                                <div className="text-center py-8 text-muted-foreground">No history</div>
+                                <div className="text-center py-8 text-muted-foreground">
+                                    No history
+                                </div>
                             ) : (
                                 history.map((item: any) => {
                                     const notificationType = detectNotificationType(item);

@@ -1,5 +1,5 @@
 import { UserButton, useUser } from "@clerk/clerk-react";
-import { Tractor, Bell, ArrowLeft, Home } from "lucide-react";
+import { Tractor, Bell, ArrowLeft, Home, Moon, Sun } from "lucide-react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useEffect, useState } from "react";
@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useRef } from "react";
 import { NotificationCenter } from "@/components/NotificationCenter";
+import { useTheme } from "@/hooks/useTheme";
 
 const roleLabels: Record<string, string> = {
     farmer: "Farmer",
@@ -28,9 +29,16 @@ const rolePaths: Record<string, string> = {
 type DashboardLayoutProps = {
     children: React.ReactNode;
     subtitle: string;
+    hidePageActions?: boolean;
+    hideWelcomeSection?: boolean;
 };
 
-const DashboardLayout = ({ children, subtitle }: DashboardLayoutProps) => {
+const DashboardLayout = ({
+    children,
+    subtitle,
+    hidePageActions = false,
+    hideWelcomeSection = false,
+}: DashboardLayoutProps) => {
     const { user } = useUser();
     const { role } = useUserRole();
     const navigate = useNavigate();
@@ -48,6 +56,7 @@ const DashboardLayout = ({ children, subtitle }: DashboardLayoutProps) => {
 
     const [profileId, setProfileId] = useState<string | null>(null);
     const [notificationCenterOpen, setNotificationCenterOpen] = useState(false);
+    const { isDark, toggleTheme } = useTheme();
     useEffect(() => {
         if (user?.id) getProfileId(user.id).then(setProfileId);
     }, [user?.id]);
@@ -270,6 +279,17 @@ const DashboardLayout = ({ children, subtitle }: DashboardLayoutProps) => {
                         </span>
                     </Link>
                     <div className="flex items-center gap-4">
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="text-muted-foreground hover:text-foreground"
+                            onClick={toggleTheme}
+                            title={isDark ? "Switch to light mode" : "Switch to dark mode"}
+                            aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
+                        >
+                            {isDark ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+                        </Button>
                         {role && (
                             <Button variant="ghost" size="icon" className="relative text-muted-foreground hover:text-foreground" onClick={() => setNotificationCenterOpen(true)}>
                                 <Bell className="h-5 w-5" />
@@ -290,20 +310,26 @@ const DashboardLayout = ({ children, subtitle }: DashboardLayoutProps) => {
             </nav>
 
             <main className="container mx-auto px-4 py-8">
-                <div className="flex items-center gap-3 mb-6">
-                    {!isDashboardRoot && (
-                        <Button variant="outline" size="sm" onClick={() => navigate(-1)} className="text-muted-foreground">
-                            <ArrowLeft className="h-4 w-4 mr-2" /> Back
+                {!hidePageActions && (
+                    <div className="flex items-center gap-3 mb-6">
+                        {!isDashboardRoot && (
+                            <Button variant="outline" size="sm" onClick={() => navigate(-1)} className="text-muted-foreground">
+                                <ArrowLeft className="h-4 w-4 mr-2" /> Back
+                            </Button>
+                        )}
+                        <Button variant="outline" size="sm" onClick={() => navigate(role ? rolePaths[role] : "/")} className="text-muted-foreground">
+                            <Home className="h-4 w-4 mr-2" /> Home
                         </Button>
-                    )}
-                    <Button variant="outline" size="sm" onClick={() => navigate(role ? rolePaths[role] : "/")} className="text-muted-foreground">
-                        <Home className="h-4 w-4 mr-2" /> Home
-                    </Button>
-                </div>
-                <h1 className="font-display text-3xl md:text-4xl font-bold text-foreground mb-2">
-                    Welcome, {user?.firstName || "User"}
-                </h1>
-                <p className="text-muted-foreground mb-10">{subtitle}</p>
+                    </div>
+                )}
+                {!hideWelcomeSection && (
+                    <>
+                        <h1 className="font-display text-3xl md:text-4xl font-bold text-foreground mb-2">
+                            Welcome, {user?.firstName || "User"}
+                        </h1>
+                        <p className="text-muted-foreground mb-10">{subtitle}</p>
+                    </>
+                )}
                 {children}
             </main>
 

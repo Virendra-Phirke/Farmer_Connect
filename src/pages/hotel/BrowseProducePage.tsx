@@ -9,6 +9,7 @@ import { Loader2, Store, Heart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { SearchBar } from "@/components/SearchBar";
+import { PaginationControls } from "@/components/PaginationControls";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,6 +21,9 @@ const BrowseProducePage = () => {
     const [searchQuery, setSearchQuery] = useState("");
     const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
     const [favoriteFarmers, setFavoriteFarmers] = useState<string[]>([]);
+    const [currentPage, setCurrentPage] = useState(1);
+
+    const PAGE_SIZE = 9;
 
     const [selectedCrop, setSelectedCrop] = useState<any | null>(null);
     const [requestQuantity, setRequestQuantity] = useState("");
@@ -40,7 +44,7 @@ const BrowseProducePage = () => {
                 console.error("Could not parse favorites");
             }
         }
-    }, []);
+    }, [user?.id]);
 
     const toggleFavorite = (farmerId: string) => {
         setFavoriteFarmers(prev => {
@@ -62,6 +66,13 @@ const BrowseProducePage = () => {
 
         return matchesSearch && matchesFavorites;
     });
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchQuery, showFavoritesOnly, listings?.length]);
+
+    const totalPages = Math.max(1, Math.ceil((filteredListings?.length || 0) / PAGE_SIZE));
+    const paginatedListings = (filteredListings || []).slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
     const handleSendRequest = async () => {
         if (!profileId || !selectedCrop || !requestQuantity) {
@@ -152,8 +163,9 @@ const BrowseProducePage = () => {
                             : "No produce available right now. Check back later!"}
                     </div>
                 ) : (
+                    <div className="space-y-4">
                     <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-6">
-                        {filteredListings.map((item: any) => {
+                        {paginatedListings.map((item: any) => {
                             const isFavorite = favoriteFarmers.includes(item.farmer_id);
 
                             return (
@@ -185,6 +197,14 @@ const BrowseProducePage = () => {
                                 </div>
                             );
                         })}
+                    </div>
+                    <PaginationControls
+                        currentPage={currentPage}
+                        totalPages={totalPages}
+                        onPageChange={setCurrentPage}
+                        totalItems={filteredListings?.length || 0}
+                        pageSize={PAGE_SIZE}
+                    />
                     </div>
                 )}
 

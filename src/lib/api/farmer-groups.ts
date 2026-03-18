@@ -1,5 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 
+const DIRECT_CHAT_PREFIX = "[DIRECT_CHAT]";
+
 export type FarmerGroup = {
   id: string;
   name: string;
@@ -404,4 +406,145 @@ export async function getSuggestedGroups(profileId: string) {
   }
 
   return data || [];
+}
+
+export async function uploadGroupIcon(groupId: string, file: File): Promise<string> {
+  // Create a unique filename
+  const fileExt = file.name.split('.').pop();
+  const fileName = `${groupId}-${Date.now()}.${fileExt}`;
+  const filePath = `${groupId}/${fileName}`;
+
+  // Upload file to Supabase Storage
+  const { error: uploadError } = await supabase.storage
+    .from('group-icons')
+    .upload(filePath, file, { upsert: false });
+
+  if (uploadError) {
+    console.error("Error uploading group icon:", uploadError);
+    throw uploadError;
+  }
+
+  // Get public URL
+  const { data } = supabase.storage
+    .from('group-icons')
+    .getPublicUrl(filePath);
+
+  return data.publicUrl;
+}
+
+export async function deleteGroupIcon(groupId: string, iconPath: string) {
+  const { error } = await supabase.storage
+    .from('group-icons')
+    .remove([iconPath]);
+
+  if (error) {
+    console.error("Error deleting group icon:", error);
+    throw error;
+  }
+}
+
+export async function getOrCreateDirectFarmerChat(
+  currentProfileId: string,
+  targetProfileId: string,
+  targetName?: string | null
+) {
+  if (!currentProfileId || !targetProfileId) {
+    throw new Error("Both profile IDs are required");
+  }
+
+  if (currentProfileId === targetProfileId) {
+    throw new Error("Cannot create a direct chat with yourself");
+  }
+
+  // 1) Get all groups the current user is already in
+  const { data: myMemberships, error: membershipError } = await supabase
+    .from("farmer_group_members")
+    .select("group_id")
+    .eq("profile_id", currentProfileId);
+
+  if (membershipError) {
+    console.error("Error reading current user memberships:", membershipError);
+    throw membershipError;
+  }
+
+  const myGroupIds = (myMemberships || []).map((m) => m.group_id);
+
+  if (myGroupIds.length > 0) {
+    // 2) Find existing direct chat group containing both users
+    const { data: candidateGroups, error: groupsError } = await supabase
+      .from("farmer_groups")
+      .select(`
+        id,
+        name,
+        description,
+        farmer_group_members(profile_id)
+      `)
+      .in("id", myGroupIds)
+      .ilike("description", `${DIRECT_CHAT_PREFIX}%`);
+
+    if (groupsError) {
+      console.error("Error reading candidate direct chat groups:", groupsError);
+      throw groupsError;
+    }
+
+    const existing = (candidateGroups || []).find((g: any) => {
+      const memberIds = (g.farmer_group_members || []).map((m: any) => m.profile_id);
+      const uniqueIds = Array.from(new Set(memberIds));
+      return (
+        uniqueIds.length === 2 &&
+        uniqueIds.includes(currentProfileId) &&
+        uniqueIds.includes(targetProfileId)
+      );
+    });
+
+    if (existing) {
+      return { id: existing.id, created: false };
+    }
+  }
+
+  // 3) Create new direct chat group
+  const directName = targetName ? `Chat with ${targetName}` : "Direct Chat";
+  const { data: createdGroup, error: createError } = await supabase
+    .from("farmer_groups")
+    .insert([
+      {
+        name: directName,
+        description: `${DIRECT_CHAT_PREFIX} ${currentProfileId}:${targetProfileId}`,
+        region: "Direct Chat",
+        created_by: currentProfileId,
+        state: null,
+        district: null,
+        taluka: null,
+        village: null,
+        soil_type: null,
+        crop_type: null,
+      },
+    ])
+    .select("id")
+    .single();
+
+  if (createError || !createdGroup?.id) {
+    console.error("Error creating direct chat group:", createError);
+    throw createError || new Error("Failed to create direct chat group");
+  }
+
+  const groupId = createdGroup.id;
+
+  // 4) Add both participants to the group
+  const { error: membersError } = await supabase
+    .from("farmer_group_members")
+    .upsert(
+      [
+        { group_id: groupId, profile_id: currentProfileId },
+        { group_id: groupId, profile_id: targetProfileId },
+      ],
+      { onConflict: "group_id,profile_id" }
+    );
+
+  if (membersError) {
+    console.error("Error adding members to direct chat group:", membersError);
+    throw membersError;
+  }
+
+  return { id: groupId, created: true };
 }

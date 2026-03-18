@@ -103,6 +103,14 @@ const asNonEmptyString = (value: unknown): string | undefined => {
   return v.length ? v : undefined;
 };
 
+const deriveIdToken = (value: unknown): string => {
+  const source = String(value ?? "").trim();
+  if (!source) return "00000000";
+  const first = source.split("-")[0] || source;
+  const cleaned = first.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+  return (cleaned || source.replace(/[^A-Za-z0-9]/g, "").toUpperCase()).slice(0, 8).padEnd(8, "0");
+};
+
 const hasPartyData = (value: Record<string, unknown>) =>
   !!(value.full_name || value.name || value.email || value.phone || value.location || value.address);
 
@@ -246,7 +254,7 @@ const normalizeBillData = (raw: RawBillInput | BillData | null | undefined): Bil
           },
         ];
 
-  const billingId = raw.billingId ?? (rawObj.billId ? String(rawObj.billId) : null);
+  const billingId = raw.billingId ?? (rawObj.billId ? String(rawObj.billId) : (rawObj.transactionId ? String(rawObj.transactionId) : null));
   const transactionId = String(
     rawObj.transactionId
       ?? rawObj.transaction_id
@@ -255,8 +263,9 @@ const normalizeBillData = (raw: RawBillInput | BillData | null | undefined): Bil
       ?? billingId
       ?? "N/A"
   );
-  const receiptNumber = raw.receiptNumber ?? (billingId ? `RCPT-${String(billingId).slice(0, 8).toUpperCase()}` : `RCPT-${Date.now().toString().slice(-8)}`);
-  const invoiceNumber = raw.invoiceNumber ?? (billingId ? `INV-${String(billingId).slice(0, 8).toUpperCase()}` : undefined);
+  const idToken = deriveIdToken(billingId ?? transactionId);
+  const receiptNumber = raw.receiptNumber ?? `RCPT-${idToken}`;
+  const invoiceNumber = raw.invoiceNumber ?? `INV-${idToken}`;
 
   return {
     billingId,
@@ -267,7 +276,7 @@ const normalizeBillData = (raw: RawBillInput | BillData | null | undefined): Bil
     title: String(raw.title ?? rawObj.cropDetails ?? "Billing Item"),
     amount,
     currency,
-    date: raw.date ?? new Date().toLocaleDateString(),
+    date: raw.date ?? new Date().toLocaleDateString("en-GB"),
     dueDate: raw.dueDate,
     paymentStatus,
     paymentMethod: raw.paymentMethod ?? "Cash / Bank Transfer",
@@ -346,13 +355,13 @@ const buildPdf = (d: BillData) => {
   doc.setFont("helvetica", "bold");
   doc.setFontSize(22);
   doc.setTextColor(...WHITE);
-  doc.text("FarmDirect Connect", ML, 38);
+  doc.text("FARMER CONNECT", ML, 38);
 
   // Tagline
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
   doc.setTextColor(187, 247, 208);
-  doc.text("Farm-to-Market | Official Billing Receipt", ML, 52);
+  doc.text("official billing recipts", ML, 52);
 
   // Bill ID pill on right
   const billLabel = `BILL ID: ${d.billingId ? String(d.billingId).toUpperCase() : "N/A"}`;
@@ -625,40 +634,40 @@ const PartyCard = ({ party, label }: { party: BillParty; label: string }) => {
   const emailLine = party.email || "N/A";
   const phoneLine = party.phone || "N/A";
   return (
-    <div className="rounded-xl border border-green-500 bg-gray-950 overflow-hidden shadow-lg">
-      <div className="bg-green-900 px-4 py-3 border-b border-green-600">
-        <span className="text-xs font-bold tracking-widest text-green-400 uppercase">{label}</span>
+    <div className="rounded-xl border border-green-200 bg-white dark:border-green-800 dark:bg-zinc-900 overflow-hidden shadow-sm">
+      <div className="bg-green-50 dark:bg-green-950/40 px-4 py-3 border-b border-green-200 dark:border-green-800">
+        <span className="text-xs font-bold tracking-widest text-green-700 dark:text-green-300 uppercase">{label}</span>
       </div>
       <div className="p-4 space-y-4">
         {/* NAME */}
         <div>
-          <p className="text-xs font-bold tracking-widest text-green-400 uppercase mb-1">Name</p>
-          <p className="font-bold text-white text-lg">{party.name}</p>
+          <p className="text-xs font-bold tracking-widest text-green-700 dark:text-green-300 uppercase mb-1">Name</p>
+          <p className="font-bold text-zinc-900 dark:text-zinc-100 text-lg">{party.name}</p>
         </div>
 
         {/* ADDRESS */}
         <div>
-          <p className="text-xs font-bold tracking-widest text-green-400 uppercase mb-1">Address</p>
-          <div className="flex items-start gap-2 text-sm text-gray-300">
-            <MapPin className="h-4 w-4 mt-0.5 shrink-0 text-green-500" />
+          <p className="text-xs font-bold tracking-widest text-green-700 dark:text-green-300 uppercase mb-1">Address</p>
+          <div className="flex items-start gap-2 text-sm text-zinc-600 dark:text-zinc-300">
+            <MapPin className="h-4 w-4 mt-0.5 shrink-0 text-green-600 dark:text-green-400" />
             <span>{addressLine}</span>
           </div>
         </div>
 
         {/* EMAIL */}
         <div>
-          <p className="text-xs font-bold tracking-widest text-green-400 uppercase mb-1">Email</p>
-          <div className="flex items-center gap-2 text-sm text-gray-300">
-            <Mail className="h-4 w-4 shrink-0 text-green-500" />
+          <p className="text-xs font-bold tracking-widest text-green-700 dark:text-green-300 uppercase mb-1">Email</p>
+          <div className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-300">
+            <Mail className="h-4 w-4 shrink-0 text-green-600 dark:text-green-400" />
             <span className="break-all">{emailLine}</span>
           </div>
         </div>
 
         {/* MOBILE */}
         <div>
-          <p className="text-xs font-bold tracking-widest text-green-400 uppercase mb-1">Mobile</p>
-          <div className="flex items-center gap-2 text-sm text-gray-300">
-            <Phone className="h-4 w-4 shrink-0 text-green-500" />
+          <p className="text-xs font-bold tracking-widest text-green-700 dark:text-green-300 uppercase mb-1">Mobile</p>
+          <div className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-300">
+            <Phone className="h-4 w-4 shrink-0 text-green-600 dark:text-green-400" />
             <span>{phoneLine}</span>
           </div>
         </div>
@@ -772,9 +781,9 @@ export const BillReceiptDialog = ({
               <div>
                 <div className="flex items-center gap-2 mb-1">
                   <Leaf className="h-5 w-5 text-green-300" />
-                  <h1 className="text-xl font-black text-white tracking-tight">FarmDirect Connect</h1>
+                  <h1 className="text-xl font-black text-white tracking-tight">FARMER CONNECT</h1>
                 </div>
-                <p className="text-green-300 text-xs font-medium tracking-wide">Farm-to-Market · Official Billing Receipt</p>
+                <p className="text-green-300 text-xs font-medium tracking-wide">official billing recipts</p>
               </div>
               <div className="text-right space-y-1.5">
                 <Badge

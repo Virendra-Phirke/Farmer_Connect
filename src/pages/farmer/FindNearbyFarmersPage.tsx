@@ -9,10 +9,13 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, User, MapPin } from "lucide-react";
+import { PaginationControls } from "@/components/PaginationControls";
+import { Loader2, User, MapPin, MessageSquare } from "lucide-react";
 import { toast } from "sonner";
+import { useNavigate } from "react-router-dom";
 
 const FindNearbyFarmersPage = () => {
+    const navigate = useNavigate();
     const { user } = useUser();
     const [profileId, setProfileId] = useState<string | null>(null);
     const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
@@ -25,6 +28,9 @@ const FindNearbyFarmersPage = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [results, setResults] = useState<UserProfile[]>([]);
     const [hasSearched, setHasSearched] = useState(false);
+    const [currentPage, setCurrentPage] = useState(1);
+
+    const PAGE_SIZE = 8;
 
     // Load user's profile info
     useEffect(() => {
@@ -58,6 +64,7 @@ const FindNearbyFarmersPage = () => {
             const filtered = data.filter(farmer => farmer.id !== profileId);
 
             setResults(filtered);
+            setCurrentPage(1);
             if (filtered.length === 0) {
                 toast.info("No farmers found in this location.");
             }
@@ -75,6 +82,15 @@ const FindNearbyFarmersPage = () => {
         setVillageCity("");
         setResults([]);
         setHasSearched(false);
+        setCurrentPage(1);
+    };
+
+    const totalPages = Math.max(1, Math.ceil(results.length / PAGE_SIZE));
+    const paginatedResults = results.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
+    const handleContactFarmer = (farmer: UserProfile) => {
+        if (!profileId || !farmer?.id) return;
+        navigate(`/farmer/groups/direct?tab=chats&peer=${farmer.id}&name=${encodeURIComponent(farmer.full_name || "Farmer")}`);
     };
 
     return (
@@ -205,8 +221,9 @@ const FindNearbyFarmersPage = () => {
                                 No farmers found matching your criteria.
                             </div>
                         ) : (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {results.map((farmer) => (
+                            <div className="space-y-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {paginatedResults.map((farmer) => (
                                     <div key={farmer.id} className="bg-card rounded-xl border border-border p-5 flex flex-col gap-3 transition-colors hover:border-primary/50">
                                         <div className="flex items-start gap-4">
                                             <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 text-primary uppercase overflow-hidden">
@@ -248,8 +265,28 @@ const FindNearbyFarmersPage = () => {
                                             <span className="text-muted-foreground">Farming Type:</span>
                                             <span className="font-medium capitalize">{farmer.farming_type || '-'}</span>
                                         </div>
+
+                                        <div className="pt-3">
+                                            <Button
+                                                type="button"
+                                                size="sm"
+                                                onClick={() => handleContactFarmer(farmer)}
+                                                disabled={false}
+                                            >
+                                                <MessageSquare className="mr-2 h-4 w-4" />
+                                                Contact Farmer
+                                            </Button>
+                                        </div>
                                     </div>
                                 ))}
+                                </div>
+                                <PaginationControls
+                                    currentPage={currentPage}
+                                    totalPages={totalPages}
+                                    onPageChange={setCurrentPage}
+                                    totalItems={results.length}
+                                    pageSize={PAGE_SIZE}
+                                />
                             </div>
                         )}
                     </section>

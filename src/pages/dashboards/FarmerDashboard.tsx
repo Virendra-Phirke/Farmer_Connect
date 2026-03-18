@@ -30,7 +30,7 @@ const FarmerDashboard = () => {
         { icon: Store, title: "My Crop Listings", description: "List and manage your produce for direct sale", stat: activeListingsCount ? `${activeListingsCount} active` : undefined, path: "/farmer/my-listings" },
         { icon: Tractor, title: "Browse Equipment", description: "Find, rent, or buy agricultural tools and machinery", path: "/farmer/browse-equipment" },
         { icon: CloudSun, title: "Weather Alerts", description: "Check forecasts and farming alerts for your region", path: "/farmer/weather-alerts" },
-        { icon: Users, title: "Farmer Groups", description: "Connect with nearby farmers in your area", path: "/farmer/groups" },
+        { icon: Users, title: "Farmer Groups / Chats", description: "Connect with nearby farmers in your area", path: "/farmer/groups" },
         { icon: MapPin, title: "Find Nearby Farmers", description: "Search for farmers near you using Gat or Survey Number", path: "/farmer/nearby" },
         { icon: ShoppingCart, title: "Purchase Requests", description: "View and manage purchase requests from restaurants & hotels", path: "/farmer/purchase-requests" },
         { icon: ClipboardList, title: "Hotel Crop Demands", description: "Fulfill specific crop requirements posted by local hotels", path: "/farmer/hotel-requests" },

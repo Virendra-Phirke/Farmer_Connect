@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import DashboardLayout from "@/components/DashboardLayout";
 import { BillReceiptDialog } from "@/components/BillReceiptDialog";
+import { PaginationControls } from "@/components/PaginationControls";
 import { SearchBar } from "@/components/SearchBar";
 import { getProfileId } from "@/lib/supabase-auth";
 import { usePurchaseRequests } from "@/hooks/usePurchaseRequests";
@@ -16,6 +17,42 @@ const BillingPage = () => {
   const [isBillOpen, setIsBillOpen] = useState(false);
   const [selectedBill, setSelectedBill] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [purchasePage, setPurchasePage] = useState(1);
+  const [contractPage, setContractPage] = useState(1);
+
+  const PAGE_SIZE = 8;
+
+  const toDateString = (value?: string) =>
+    new Date(value || new Date()).toLocaleDateString("en-GB");
+
+  const hashAlphaNum = (input: string) => {
+    let hash = 0;
+    for (let i = 0; i < input.length; i += 1) {
+      hash = (hash * 31 + input.charCodeAt(i)) >>> 0;
+    }
+    return hash.toString(36).toUpperCase().padStart(6, "0").slice(0, 6);
+  };
+
+  const buildOfficialNumbers = ({
+    sourceId,
+    createdAt,
+    kind,
+  }: {
+    sourceId: string;
+    createdAt?: string;
+    kind: "PR" | "SC";
+  }) => {
+    const date = new Date(createdAt || new Date());
+    const yyyymmdd = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}${String(date.getDate()).padStart(2, "0")}`;
+    const yymm = `${String(date.getFullYear()).slice(-2)}${String(date.getMonth() + 1).padStart(2, "0")}`;
+    const serial = hashAlphaNum(`${sourceId}-${kind}-${yyyymmdd}`);
+
+    return {
+      billingId: `FCB-${kind}-${yyyymmdd}-${serial}`,
+      receiptNumber: `RCPT-${yymm}-${serial}`,
+      invoiceNumber: `INV-${yymm}-${serial}`,
+    };
+  };
 
   useEffect(() => {
     if (user?.id) getProfileId(user.id).then(setProfileId);
@@ -58,24 +95,47 @@ const BillingPage = () => {
     [contractBills, searchQuery]
   );
 
+  useEffect(() => {
+    setPurchasePage(1);
+    setContractPage(1);
+  }, [searchQuery]);
+
+  const totalPurchasePages = Math.max(1, Math.ceil(filteredPurchaseBills.length / PAGE_SIZE));
+  const totalContractPages = Math.max(1, Math.ceil(filteredContractBills.length / PAGE_SIZE));
+
+  const paginatedPurchaseBills = useMemo(() => {
+    const start = (purchasePage - 1) * PAGE_SIZE;
+    return filteredPurchaseBills.slice(start, start + PAGE_SIZE);
+  }, [filteredPurchaseBills, purchasePage]);
+
+  const paginatedContractBills = useMemo(() => {
+    const start = (contractPage - 1) * PAGE_SIZE;
+    return filteredContractBills.slice(start, start + PAGE_SIZE);
+  }, [filteredContractBills, contractPage]);
+
   const showPurchaseBill = (req: any) => {
     const cropName = req.crop_listing?.crop_name || "Crop";
     const quantity = Number(req.quantity_kg || 0);
     const unitPrice = Number(req.offered_price || 0);
     const computedAmount = Number(req.total_amount ?? (quantity * unitPrice));
-    const billId = req.billing_id || `INV-${req.id.slice(0, 8).toUpperCase()}`;
+    const numbers = buildOfficialNumbers({
+      sourceId: String(req.id || req.billing_id || "REQ"),
+      createdAt: req.created_at,
+      kind: "PR",
+    });
 
     setSelectedBill({
       title: `${cropName} - Purchase Request`,
-      receiptNumber: `RCPT-${billId.slice(0, 8).toUpperCase()}`,
-      billId,
-      billingId: billId,
+      receiptNumber: numbers.receiptNumber,
+      invoiceNumber: numbers.invoiceNumber,
+      billId: numbers.billingId,
+      billingId: numbers.billingId,
       transactionId: req.id,
       transactionType: "Produce Purchase",
-      date: new Date(req.created_at || new Date()).toLocaleDateString(),
+      date: toDateString(req.created_at),
       amount: computedAmount,
       paymentStatus: req.payment_status || "unpaid",
-      paymentConfirmedAt: req.payment_status === "paid" ? new Date(req.updated_at || req.created_at).toLocaleString() : undefined,
+      paymentConfirmedAt: req.payment_status === "paid" ? new Date(req.updated_at || req.created_at).toLocaleString("en-GB") : undefined,
       status: req.status || "accepted",
       buyer: {
         id: req.buyer?.id || profileId || undefined,
@@ -119,19 +179,24 @@ const BillingPage = () => {
   const showContractBill = (contract: any) => {
     const quantityPerDelivery = contract.quantity_kg_per_delivery ?? contract.quantity_per_delivery ?? 0;
     const computedAmount = Number(contract.total_amount ?? (Number(contract.price_per_kg || 0) * Number(quantityPerDelivery || 0)));
-    const billId = contract.billing_id || `CONT-${contract.id.slice(0, 8).toUpperCase()}`;
+    const numbers = buildOfficialNumbers({
+      sourceId: String(contract.id || contract.billing_id || "CONTRACT"),
+      createdAt: contract.start_date || contract.created_at,
+      kind: "SC",
+    });
 
     setSelectedBill({
       title: `${contract.crop_name} - Supply Contract`,
-      receiptNumber: `RCPT-${billId.slice(0, 8).toUpperCase()}`,
-      billId,
-      billingId: billId,
+      receiptNumber: numbers.receiptNumber,
+      invoiceNumber: numbers.invoiceNumber,
+      billId: numbers.billingId,
+      billingId: numbers.billingId,
       transactionId: contract.id,
       transactionType: "Supply Contract Delivery",
-      date: new Date(contract.start_date || contract.created_at || new Date()).toLocaleDateString(),
+      date: toDateString(contract.start_date || contract.created_at),
       amount: computedAmount,
       paymentStatus: contract.payment_status || "unpaid",
-      paymentConfirmedAt: contract.payment_status === "paid" ? new Date(contract.updated_at || contract.created_at).toLocaleString() : undefined,
+      paymentConfirmedAt: contract.payment_status === "paid" ? new Date(contract.updated_at || contract.created_at).toLocaleString("en-GB") : undefined,
       status: contract.status || "active",
       buyer: {
         id: contract.buyer?.id || profileId || undefined,
@@ -208,7 +273,7 @@ const BillingPage = () => {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {filteredPurchaseBills.map((req: any) => (
+                  {paginatedPurchaseBills.map((req: any) => (
                     <div key={req.id} className="bg-card rounded-xl border border-border p-4 sm:p-6 flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4">
                       <div>
                         <p className="font-semibold">{req.crop_listing?.crop_name || "Crop"}</p>
@@ -221,6 +286,14 @@ const BillingPage = () => {
                       </Button>
                     </div>
                   ))}
+                  <PaginationControls
+                    currentPage={purchasePage}
+                    totalPages={totalPurchasePages}
+                    onPageChange={setPurchasePage}
+                    totalItems={filteredPurchaseBills.length}
+                    pageSize={PAGE_SIZE}
+                    className="pt-1"
+                  />
                 </div>
               )}
             </TabsContent>
@@ -236,7 +309,7 @@ const BillingPage = () => {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {filteredContractBills.map((contract: any) => (
+                  {paginatedContractBills.map((contract: any) => (
                     <div key={contract.id} className="bg-card rounded-xl border border-border p-4 sm:p-6 flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4">
                       <div>
                         <p className="font-semibold">{contract.crop_name}</p>
@@ -249,6 +322,14 @@ const BillingPage = () => {
                       </Button>
                     </div>
                   ))}
+                  <PaginationControls
+                    currentPage={contractPage}
+                    totalPages={totalContractPages}
+                    onPageChange={setContractPage}
+                    totalItems={filteredContractBills.length}
+                    pageSize={PAGE_SIZE}
+                    className="pt-1"
+                  />
                 </div>
               )}
             </TabsContent>
