@@ -17,11 +17,12 @@ export function usePurchaseRequests(filters?: {
     crop_listing_id?: string;
     status?: string;
     request_type?: string;
-}, options?: { enabled?: boolean }) {
+}, options?: { enabled?: boolean; refetchInterval?: number | false }) {
     return useQuery({
         queryKey: ["purchase-requests", filters],
         queryFn: () => getPurchaseRequests(filters),
         enabled: options?.enabled !== undefined ? options.enabled : true,
+        refetchInterval: options?.refetchInterval,
     });
 }
 
@@ -33,11 +34,12 @@ export function usePurchaseRequest(id: string) {
     });
 }
 
-export function useFarmerPurchaseRequests(farmerId: string) {
+export function useFarmerPurchaseRequests(farmerId: string, options?: { enabled?: boolean; refetchInterval?: number | false }) {
     return useQuery({
         queryKey: ["farmer-purchase-requests", farmerId],
         queryFn: () => getFarmerPurchaseRequests(farmerId),
-        enabled: !!farmerId,
+        enabled: options?.enabled !== undefined ? options.enabled : !!farmerId,
+        refetchInterval: options?.refetchInterval,
     });
 }
 

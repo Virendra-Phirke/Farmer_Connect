@@ -2,10 +2,11 @@ import { useState, useEffect } from "react";
 import { useEquipmentListings } from "@/hooks/useEquipmentListings";
 import { useCreateEquipmentBooking } from "@/hooks/useEquipmentBookings";
 import { useUser } from "@clerk/clerk-react";
-import { getProfileId } from "@/lib/supabase-auth";
+import { getProfileId, getUserProfile, updateUserProfile } from "@/lib/supabase-auth";
 import DashboardLayout from "@/components/DashboardLayout";
-import { Loader2, Tractor, MapPin } from "lucide-react";
+import { Loader2, Tractor, MapPin, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SearchBar } from "@/components/SearchBar";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -15,6 +16,7 @@ import { differenceInDays, parseISO } from "date-fns";
 const BrowseEquipmentPage = () => {
     const { user } = useUser();
     const [profileId, setProfileId] = useState<string | null>(null);
+    const [searchQuery, setSearchQuery] = useState("");
 
     useEffect(() => {
         if (user?.id) {
@@ -27,17 +29,71 @@ const BrowseEquipmentPage = () => {
 
     // Filter out equipment with 0 quantity - show equipment even if previously rented until unavailable
     const availableEquipment = equipment?.filter((item: any) => item.quantity > 0) || [];
+    
+    // Filter by search query
+    const filteredEquipment = availableEquipment.filter((item: any) =>
+        item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.owner?.full_name?.toLowerCase().includes(searchQuery.toLowerCase())
+    );
 
     const [selectedEquipment, setSelectedEquipment] = useState<any | null>(null);
+    const [guideEquipment, setGuideEquipment] = useState<any | null>(null);
     const [startDate, setStartDate] = useState("");
     const [endDate, setEndDate] = useState("");
     const [notes, setNotes] = useState("");
     const [quantity, setQuantity] = useState("1");
 
-    const handleRequest = () => {
+    const getEquipmentGuidance = (item: any) => {
+        const category = String(item?.category || "").toLowerCase();
+
+        if (category.includes("tractor")) {
+            return [
+                "Check engine oil and coolant before start.",
+                "Drive at low speed in wet or uneven fields.",
+                "Avoid overloading and sharp turns with attachments.",
+            ];
+        }
+
+        if (category.includes("sprayer")) {
+            return [
+                "Use correct PPE and follow label dosage.",
+                "Test nozzle pressure before field application.",
+                "Clean tank/nozzles after use to prevent clogging.",
+            ];
+        }
+
+        if (category.includes("harvester") || category.includes("thresher")) {
+            return [
+                "Keep hands/clothes away from moving parts.",
+                "Operate only on stable surface and proper crop moisture.",
+                "Stop machine fully before maintenance/cleaning.",
+            ];
+        }
+
+        return [
+            "Inspect equipment condition before use.",
+            "Follow owner instructions and safety checks.",
+            "Report any issue immediately to the owner.",
+        ];
+    };
+
+    const handleRequest = async () => {
         if (!selectedEquipment || !startDate || !endDate || !profileId || !quantity) {
             toast.error("Please fill in all required fields");
             return;
+        }
+
+        try {
+            const clerkPhone = user?.phoneNumbers?.[0]?.phoneNumber;
+            if (user?.id && clerkPhone) {
+                const existing = await getUserProfile(user.id);
+                if (!existing?.phone) {
+                    await updateUserProfile(user.id, { phone: clerkPhone });
+                }
+            }
+        } catch (e) {
+            console.warn("Could not sync renter phone to profile before booking:", e);
         }
 
         const start = parseISO(startDate);
@@ -74,18 +130,36 @@ const BrowseEquipmentPage = () => {
     return (
         <DashboardLayout subtitle="Browse available agricultural equipment for rent.">
             <div className="space-y-6">
-                <h2 className="text-xl font-bold">Available Equipment</h2>
+                <div className="flex justify-between items-center">
+                    <h2 className="text-xl font-bold">Available Equipment</h2>
+                </div>
+                
+                <SearchBar 
+                    placeholder="Search by equipment name, category, or owner..." 
+                    onSearch={setSearchQuery} 
+                />
 
                 {isLoading ? (
                     <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
                 ) : !availableEquipment?.length ? (
                     <div className="bg-card rounded-xl border border-border p-12 text-center text-muted-foreground">No equipment available right now. Check back later!</div>
+                ) : !filteredEquipment?.length ? (
+                    <div className="bg-card rounded-xl border border-border p-12 text-center text-muted-foreground">No equipment matches your search. Try adjusting your filters.</div>
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {availableEquipment.map((item: any) => {
+                        {filteredEquipment.map((item: any) => {
                             const isLowStock = item.quantity <= 2;
                             return (
-                            <div key={item.id} className={`bg-card rounded-xl border ${isLowStock ? 'border-orange-300' : 'border-border'} p-6 hover:shadow-md transition-shadow`}>
+                            <div key={item.id} className={`bg-card rounded-xl border ${isLowStock ? 'border-orange-300' : 'border-border'} p-6 hover:shadow-md transition-shadow relative`}>
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="absolute top-4 right-4 h-8 w-8 text-muted-foreground hover:text-primary"
+                                    onClick={() => setGuideEquipment(item)}
+                                    title="Equipment guidance"
+                                >
+                                    <Info className="h-5 w-5" />
+                                </Button>
                                 <div className="flex items-center gap-3 mb-4">
                                     <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center"><Tractor className="h-5 w-5 text-accent" /></div>
                                     <div className="flex-1">
@@ -108,7 +182,7 @@ const BrowseEquipmentPage = () => {
 
                 {/* Rental Request Dialog */}
                 <Dialog open={!!selectedEquipment} onOpenChange={(open) => !open && setSelectedEquipment(null)}>
-                    <DialogContent>
+                    <DialogContent className="max-w-md">
                         <DialogHeader>
                             <DialogTitle>Request Rental for {selectedEquipment?.name}</DialogTitle>
                             <DialogDescription>
@@ -124,6 +198,29 @@ const BrowseEquipmentPage = () => {
                                     </p>
                                 </div>
                             )}
+                            
+                            {/* Pricing Guidance Box */}
+                            <div className="p-4 rounded-lg bg-primary/5 border border-primary/20">
+                                <p className="text-xs font-semibold text-primary mb-2">💡 How Pricing Works</p>
+                                <p className="text-xs text-foreground mb-2">
+                                  <span className="font-semibold">Example:</span> If you select 16th to 17th = <span className="text-primary font-semibold">2 days</span>
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  Both start and end dates are included in the rental period.
+                                </p>
+                                {startDate && endDate && (
+                                    <div className="mt-3 pt-3 border-t border-primary/10">
+                                        <p className="text-xs font-semibold text-foreground mb-1">Your Rental:</p>
+                                        <p className="text-sm text-primary font-bold">
+                                            {Math.max(0, differenceInDays(parseISO(endDate), parseISO(startDate)) + 1)} days × {parseInt(quantity) || 1} unit{parseInt(quantity) > 1 ? 's' : ''} × ₹{selectedEquipment?.price_per_day}/day
+                                        </p>
+                                        <p className="text-sm text-primary font-bold mt-1">
+                                            = <span className="text-lg">₹{Math.max(0, differenceInDays(parseISO(endDate), parseISO(startDate)) + 1) * (parseInt(quantity) || 1) * (selectedEquipment?.price_per_day || 0)}</span>
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+
                             <div className="grid grid-cols-4 items-center gap-4">
                                 <Label htmlFor="quantity" className="text-right">Quantity</Label>
                                 <Input id="quantity" type="number" className="col-span-3" value={quantity} onChange={e => setQuantity(e.target.value)} min="1" max={selectedEquipment?.quantity} />
@@ -153,6 +250,43 @@ const BrowseEquipmentPage = () => {
                                 {createBooking.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                                 Submit Request
                             </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+
+                {/* Equipment Guidance Dialog */}
+                <Dialog open={!!guideEquipment} onOpenChange={(open) => !open && setGuideEquipment(null)}>
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>Equipment Guidance</DialogTitle>
+                            <DialogDescription>
+                                {guideEquipment?.name} • {guideEquipment?.category}
+                            </DialogDescription>
+                        </DialogHeader>
+
+                        <div className="space-y-3 py-2">
+                            <div className="text-sm">
+                                <p className="font-semibold mb-1">Model / Equipment</p>
+                                <p>{guideEquipment?.name || "N/A"}</p>
+                            </div>
+                            <div className="text-sm">
+                                <p className="font-semibold mb-1">Usage Guidance</p>
+                                <ul className="list-disc pl-5 space-y-1 text-muted-foreground">
+                                    {getEquipmentGuidance(guideEquipment).map((tip, idx) => (
+                                        <li key={idx}>{tip}</li>
+                                    ))}
+                                </ul>
+                            </div>
+                            {guideEquipment?.description && (
+                                <div className="text-sm">
+                                    <p className="font-semibold mb-1">Owner Notes</p>
+                                    <p className="text-muted-foreground">{guideEquipment.description}</p>
+                                </div>
+                            )}
+                        </div>
+
+                        <DialogFooter>
+                            <Button variant="outline" onClick={() => setGuideEquipment(null)}>Close</Button>
                         </DialogFooter>
                     </DialogContent>
                 </Dialog>

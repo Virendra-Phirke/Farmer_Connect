@@ -17,7 +17,12 @@ export type SupplyContract = {
     updated_at: string;
 };
 
-export type SupplyContractInsert = Omit<SupplyContract, "id" | "created_at" | "updated_at">;
+export type SupplyContractInsert = Omit<SupplyContract, "id" | "created_at" | "updated_at" | "status" | "payment_status" | "billing_id"> & {
+    status?: SupplyContract["status"];
+    payment_status?: SupplyContract["payment_status"];
+    billing_id?: SupplyContract["billing_id"];
+    total_amount?: number;
+};
 
 export async function getSupplyContracts(filters?: {
     buyer_id?: string;
@@ -79,6 +84,68 @@ export async function getSupplyContracts(filters?: {
         throw error;
     }
 
+    // Enrich with latest profile data to ensure fresh phone numbers
+    // IMPORTANT: Only enriches display data, never modifies database
+    if (data && data.length > 0) {
+        try {
+            const enrichedData = await Promise.all(
+                data.map(async (contract: any) => {
+                    const enrichedContract = { ...contract };
+
+                    // Refresh buyer profile phone - check all sources, but don't overwrite if already present
+                    if (contract.buyer_id && contract.buyer) {
+                        const { data: freshBuyer } = await (supabase as any)
+                            .from("profiles")
+                            .select(`
+                              phone,
+                              buyer_profiles(mobile_number),
+                              equipment_owner_profiles(mobile_number)
+                            `)
+                            .eq("id", contract.buyer_id)
+                            .maybeSingle();
+                        if (freshBuyer && enrichedContract.buyer) {
+                            const buyerRoleData = Array.isArray(freshBuyer.buyer_profiles) ? freshBuyer.buyer_profiles[0] : freshBuyer.buyer_profiles;
+                            const equipmentRoleData = Array.isArray(freshBuyer.equipment_owner_profiles) ? freshBuyer.equipment_owner_profiles[0] : freshBuyer.equipment_owner_profiles;
+                            const freshPhone = freshBuyer.phone || buyerRoleData?.mobile_number || equipmentRoleData?.mobile_number;
+                            // Only update if we found a non-null value
+                            if (freshPhone) {
+                                enrichedContract.buyer.phone = freshPhone;
+                            }
+                        }
+                    }
+
+                    // Refresh farmer profile phone - check all sources, but don't overwrite if already present
+                    if (contract.farmer_id && contract.farmer) {
+                        const { data: freshFarmer } = await (supabase as any)
+                            .from("profiles")
+                            .select(`
+                              phone,
+                              buyer_profiles(mobile_number),
+                              equipment_owner_profiles(mobile_number)
+                            `)
+                            .eq("id", contract.farmer_id)
+                            .maybeSingle();
+                        if (freshFarmer && enrichedContract.farmer) {
+                            const buyerRoleData = Array.isArray(freshFarmer.buyer_profiles) ? freshFarmer.buyer_profiles[0] : freshFarmer.buyer_profiles;
+                            const equipmentRoleData = Array.isArray(freshFarmer.equipment_owner_profiles) ? freshFarmer.equipment_owner_profiles[0] : freshFarmer.equipment_owner_profiles;
+                            const freshPhone = freshFarmer.phone || buyerRoleData?.mobile_number || equipmentRoleData?.mobile_number;
+                            // Only update if we found a non-null value
+                            if (freshPhone) {
+                                enrichedContract.farmer.phone = freshPhone;
+                            }
+                        }
+                    }
+
+                    return enrichedContract;
+                })
+            );
+            return enrichedData;
+        } catch (enrichError) {
+            console.warn("Error enriching supply contracts with fresh data:", enrichError);
+            return data; // Return original data if enrichment fails
+        }
+    }
+
     return data;
 }
 
@@ -137,15 +204,46 @@ export async function createSupplyContract(contract: SupplyContractInsert) {
         console.warn("Could not self-heal buyer_profiles:", e);
     }
 
-    const { data, error } = await supabase
+    const basePayload: Record<string, any> = {
+        ...contract,
+        quantity_kg_per_delivery: Number(contract.quantity_kg_per_delivery),
+        price_per_kg: Number(contract.price_per_kg),
+        status: contract.status ?? "pending",
+    };
+
+    if (basePayload.billing_id == null) {
+        delete basePayload.billing_id;
+    }
+    if (basePayload.payment_status == null) {
+        delete basePayload.payment_status;
+    }
+
+    // Try modern schema first
+    let { data, error } = await supabase
         .from("supply_contracts")
-        .insert(contract)
+        .insert(basePayload)
         .select()
         .single();
 
+    // Fallback: older schema without payment_status / billing_id columns
+    if (error && error.code === "PGRST204") {
+        const legacyPayload = { ...basePayload };
+        delete legacyPayload.payment_status;
+        delete legacyPayload.billing_id;
+
+        const retry = await supabase
+            .from("supply_contracts")
+            .insert(legacyPayload)
+            .select()
+            .single();
+
+        data = retry.data;
+        error = retry.error;
+    }
+
     if (error) {
         console.error("Error creating supply contract:", error);
-        throw error;
+        throw new Error(error.message || "Failed to create supply contract");
     }
 
     return data;

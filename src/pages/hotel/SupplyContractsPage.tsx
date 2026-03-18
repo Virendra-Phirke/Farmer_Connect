@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useUser } from "@clerk/clerk-react";
 import { getProfileId } from "@/lib/supabase-auth";
 import { useSupplyContracts, useUpdateSupplyContract } from "@/hooks/useSupplyContracts";
@@ -7,6 +7,7 @@ import { Loader2, FileText, Check, X, Clock, Receipt } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { SearchBar } from "@/components/SearchBar";
 import { BillReceiptDialog } from "@/components/BillReceiptDialog";
 
 const SupplyContractsPage = () => {
@@ -14,6 +15,7 @@ const SupplyContractsPage = () => {
     const [profileId, setProfileId] = useState<string | null>(null);
     const [isBillOpen, setIsBillOpen] = useState(false);
     const [selectedContract, setSelectedContract] = useState<any>(null);
+    const [searchQuery, setSearchQuery] = useState("");
 
     useEffect(() => {
         if (user?.id) getProfileId(user.id).then(setProfileId);
@@ -21,28 +23,52 @@ const SupplyContractsPage = () => {
 
     const { data: contracts, isLoading } = useSupplyContracts(
         profileId ? { buyer_id: profileId } : undefined,
-        { enabled: !!profileId }
+        { enabled: !!profileId, refetchInterval: 10000 }
     );
     const updateMutation = useUpdateSupplyContract();
 
-    const pendingContracts = contracts?.filter((c: any) => c.status === "pending") || [];
-    const historyContracts = contracts?.filter((c: any) => c.status !== "pending") || [];
+    const pendingContracts = useMemo(
+        () => contracts?.filter((c: any) => c.status === "pending") || [],
+        [contracts]
+    );
+    const historyContracts = useMemo(
+        () => contracts?.filter((c: any) => c.status !== "pending") || [],
+        [contracts]
+    );
+
+    // Filter by search query
+    const filteredPendingContracts = useMemo(
+        () => pendingContracts.filter((c: any) =>
+            c.crop_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            c.farmer?.full_name?.toLowerCase().includes(searchQuery.toLowerCase())
+        ),
+        [pendingContracts, searchQuery]
+    );
+
+    const filteredHistoryContracts = useMemo(
+        () => historyContracts.filter((c: any) =>
+            c.crop_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            c.farmer?.full_name?.toLowerCase().includes(searchQuery.toLowerCase())
+        ),
+        [historyContracts, searchQuery]
+    );
 
     const showBill = (contract: any) => {
         const quantityPerDelivery = contract.quantity_kg_per_delivery ?? contract.quantity_per_delivery ?? 0;
-        const computedAmount = contract.price_per_kg * quantityPerDelivery;
-        const billId = contract.id.slice(0, 8).toUpperCase();
+        const computedAmount = Number(contract.total_amount ?? (Number(contract.price_per_kg || 0) * Number(quantityPerDelivery || 0)));
+        const billId = contract.billing_id || `CONT-${contract.id.slice(0, 8).toUpperCase()}`;
 
         setSelectedContract({
             title: `${contract.crop_name} - Supply Contract`,
-            receiptNumber: `RCPT-${billId}`,
-            billId: `CONT-${billId}`,
-            billingId: `CONT-${billId}`,
+            receiptNumber: `RCPT-${billId.slice(0, 8).toUpperCase()}`,
+            billId,
+            billingId: billId,
             transactionId: contract.id,
             transactionType: "Supply Contract Delivery",
             date: new Date(contract.start_date || contract.created_at).toLocaleDateString(),
             amount: computedAmount,
             paymentStatus: contract.payment_status || "unpaid",
+            paymentConfirmedAt: contract.payment_status === "paid" ? new Date(contract.updated_at || contract.created_at).toLocaleString() : undefined,
             status: contract.status || "pending",
             buyer: {
                 id: contract.buyer?.id || profileId || undefined,
@@ -68,9 +94,9 @@ const SupplyContractsPage = () => {
             },
             lineItems: [
                 {
-                    description: `${contract.crop_name} - ${contract.delivery_frequency} delivery (${quantityPerDelivery} kg)`,
-                    quantity: 1,
-                    unitPrice: computedAmount,
+                    description: `${contract.crop_name} - ${contract.delivery_frequency} delivery (${quantityPerDelivery} kg)` ,
+                    quantity: Number(quantityPerDelivery || 0),
+                    unitPrice: Number(contract.price_per_kg || 0),
                     amount: computedAmount,
                 }
             ],
@@ -83,9 +109,13 @@ const SupplyContractsPage = () => {
         setIsBillOpen(true);
     };
 
-    const handleAccept = (id: string) => {
-        updateMutation.mutate({ id, updates: { status: "active" } }, {
-            onSuccess: () => toast.success("Supply contract accepted and activated!")
+    const handleAccept = (contract: any) => {
+        updateMutation.mutate({ id: contract.id, updates: { status: "active" } }, {
+            onSuccess: () => {
+                toast.success("Supply contract accepted and activated!");
+                // Auto-open bill after accepting
+                setTimeout(() => showBill(contract), 500);
+            }
         });
     };
 
@@ -110,6 +140,11 @@ const SupplyContractsPage = () => {
             <div className="space-y-6">
                 <h2 className="text-xl font-bold flex items-center gap-2"><FileText className="h-6 w-6" /> Supply Contracts</h2>
 
+                <SearchBar 
+                    placeholder="Search by crop name or farmer..." 
+                    onSearch={setSearchQuery} 
+                />
+
                 {isLoading ? (
                     <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
                 ) : (
@@ -122,19 +157,23 @@ const SupplyContractsPage = () => {
                         <TabsContent value="pending">
                             {!pendingContracts.length ? (
                                 <div className="bg-card rounded-xl border border-border p-12 text-center text-muted-foreground">No pending supply contract proposals.</div>
+                            ) : !filteredPendingContracts.length ? (
+                                <div className="bg-card rounded-xl border border-border p-12 text-center text-muted-foreground">No pending contracts match your search.</div>
                             ) : (
                                 <div className="space-y-4">
-                                    {pendingContracts.map((contract: any) => (
-                                        <div key={contract.id} className="bg-card rounded-xl border border-border p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                    {filteredPendingContracts.map((contract: any) => (
+                                        <div key={contract.id} className="bg-card rounded-xl border border-border p-4 sm:p-6 flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4">
                                             <div>
                                                 <p className="font-semibold text-lg">{contract.crop_name} <span className="text-muted-foreground font-normal text-sm">from {contract.farmer?.full_name || "Unknown Farmer"}</span></p>
-                                                <div className="grid grid-cols-2 gap-x-8 gap-y-1 mt-2 text-sm">
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-1 mt-2 text-sm">
                                                     <p><span className="text-muted-foreground">Quantity:</span> {contract.quantity_kg_per_delivery}kg / {contract.delivery_frequency}</p>
                                                     <p><span className="text-muted-foreground">Duration:</span> {new Date(contract.start_date).toLocaleDateString()} - {new Date(contract.end_date).toLocaleDateString()}</p>
+                                                    <p><span className="text-muted-foreground">Price:</span> ₹{Number(contract.price_per_kg || 0)}/kg</p>
+                                                    <p><span className="text-muted-foreground">Total/Delivery:</span> ₹{Number(contract.total_amount ?? (Number(contract.price_per_kg || 0) * Number(contract.quantity_kg_per_delivery || 0)))}</p>
                                                 </div>
                                             </div>
                                             <div className="flex gap-2 shrink-0">
-                                                <Button size="sm" onClick={() => handleAccept(contract.id)} disabled={updateMutation.isPending}><Check className="mr-1 h-4 w-4" /> Accept Proposal</Button>
+                                                <Button size="sm" onClick={() => handleAccept(contract)} disabled={updateMutation.isPending}><Check className="mr-1 h-4 w-4" /> Accept & Bill</Button>
                                                 <Button size="sm" variant="outline" onClick={() => handleReject(contract.id)} disabled={updateMutation.isPending}><X className="mr-1 h-4 w-4" /> Reject</Button>
                                             </div>
                                         </div>
@@ -146,15 +185,19 @@ const SupplyContractsPage = () => {
                         <TabsContent value="history">
                             {!historyContracts.length ? (
                                 <div className="bg-card rounded-xl border border-border p-12 text-center text-muted-foreground">No supply contract history found.</div>
+                            ) : !filteredHistoryContracts.length ? (
+                                <div className="bg-card rounded-xl border border-border p-12 text-center text-muted-foreground">No history contracts match your search.</div>
                             ) : (
                                 <div className="space-y-4">
-                                    {historyContracts.map((contract: any) => (
-                                        <div key={contract.id} className="bg-card border border-border p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 opacity-80">
+                                    {filteredHistoryContracts.map((contract: any) => (
+                                        <div key={contract.id} className="bg-card border border-border p-4 sm:p-6 flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4 opacity-80">
                                             <div>
                                                 <p className="font-semibold text-lg">{contract.crop_name} <span className="text-muted-foreground font-normal text-sm">from {contract.farmer?.full_name || "Unknown Farmer"}</span></p>
-                                                <div className="grid grid-cols-2 gap-x-8 gap-y-1 mt-2 text-sm">
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-1 mt-2 text-sm">
                                                     <p><span className="text-muted-foreground">Quantity:</span> {contract.quantity_kg_per_delivery}kg / {contract.delivery_frequency}</p>
                                                     <p><span className="text-muted-foreground">Duration:</span> {new Date(contract.start_date).toLocaleDateString()} - {new Date(contract.end_date).toLocaleDateString()}</p>
+                                                    <p><span className="text-muted-foreground">Price:</span> ₹{Number(contract.price_per_kg || 0)}/kg</p>
+                                                    <p><span className="text-muted-foreground">Total/Delivery:</span> ₹{Number(contract.total_amount ?? (Number(contract.price_per_kg || 0) * Number(contract.quantity_kg_per_delivery || 0)))}</p>
                                                 </div>
                                             </div>
                                             <div className="flex flex-col items-end gap-2">

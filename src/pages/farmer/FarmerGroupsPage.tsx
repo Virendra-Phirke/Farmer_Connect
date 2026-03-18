@@ -14,6 +14,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchBar } from "@/components/SearchBar";
+import { PaginationControls } from "@/components/PaginationControls";
+import { useIndianLocations } from "@/hooks/useIndianLocations";
 // @ts-expect-error - The package's index.d.ts is malformed and not a module
 import data from "data-for-india";
 
@@ -26,12 +29,16 @@ const FarmerGroupsPage = () => {
     const [isCreateOpen, setIsCreateOpen] = useState(false);
     const [newGroup, setNewGroup] = useState<Partial<FarmerGroupInsert>>({});
     const [groupToLeave, setGroupToLeave] = useState<string | null>(null);
+    const [searchQuery, setSearchQuery] = useState("");
+    const [currentPage, setCurrentPage] = useState(1);
+
+    const PAGE_SIZE = 8;
 
     useEffect(() => {
         if (user?.id) getProfileId(user.id).then(setProfileId);
     }, [user?.id]);
 
-    const { data: farmerProfile } = useFarmerProfile(profileId || "");
+    const { data: farmerProfile, isLoading: farmerProfileLoading } = useFarmerProfile(profileId || "");
 
     const { data: groups, isLoading } = useFarmerGroups();
     const joinMutation = useJoinFarmerGroup();
@@ -40,14 +47,61 @@ const FarmerGroupsPage = () => {
     const deleteGroupMutation = useDeleteFarmerGroup();
     const requestJoinMutation = useRequestToJoinFarmerGroup();
 
+    // Filter groups by search query and taluka (hidden filter)
+    const normalize = (value: string | null | undefined) =>
+        (value || "").toString().trim().toLowerCase().replace(/\s+/g, " ");
+
+    const currentFarmerTaluka = normalize((farmerProfile as any)?.taluka);
+
+    const filteredGroups = groups?.filter((group: any) => {
+        const isMember = group.farmer_group_members?.some((m: any) => m.profile_id === profileId);
+
+        const groupTaluka = normalize(group?.taluka);
+        const regionTaluka = normalize(group?.region?.split(",")?.[1]);
+        const isSameTaluka = !!currentFarmerTaluka && (groupTaluka === currentFarmerTaluka || regionTaluka === currentFarmerTaluka);
+
+        // Show groups from same taluka OR groups already joined by the user
+        if (!isMember && !isSameTaluka) return false;
+
+        // Visible search filter
+        const q = searchQuery.toLowerCase();
+        const matchesSearch = !searchQuery ||
+            group.name?.toLowerCase().includes(q) ||
+            group.description?.toLowerCase().includes(q) ||
+            group.region?.toLowerCase().includes(q);
+
+        return matchesSearch;
+    }) || [];
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchQuery, groups?.length]);
+
+    const totalPages = Math.max(1, Math.ceil(filteredGroups.length / PAGE_SIZE));
+    const paginatedGroups = filteredGroups.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
     const availableDistricts = data.districts
         .filter((d: any) => d.state === newGroup.state)
         .map((d: any) => d.district as string)
         .sort();
 
+    const {
+        subDistricts: availableTalukas,
+        villages: availableVillages,
+        isLoading: locationsLoading,
+    } = useIndianLocations(
+        newGroup.state || "",
+        newGroup.district || "",
+        newGroup.taluka || ""
+    );
+
     const handleCreate = (e: React.FormEvent) => {
         e.preventDefault();
         if (!profileId) return;
+        if (!newGroup.taluka) {
+            toast.error("Please select a taluka");
+            return;
+        }
         createGroupMutation.mutate({
             ...newGroup,
             region: [newGroup.village, newGroup.taluka, newGroup.district, newGroup.state].filter(Boolean).join(", "),
@@ -97,10 +151,14 @@ const FarmerGroupsPage = () => {
             <div className="space-y-6">
                 <div className="flex justify-between items-center mb-6">
                     <h2 className="text-xl font-bold flex items-center gap-2"><Users className="h-6 w-6" /> Farmer Groups</h2>
-                    <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-                        <DialogTrigger asChild>
-                            <Button><Plus className="mr-2 h-4 w-4" /> Create Group</Button>
-                        </DialogTrigger>
+                    <div className="flex gap-2">
+                        <Button variant="outline" onClick={() => navigate("/farmer/groups/direct?tab=chats")}>
+                            <MessageSquare className="mr-2 h-4 w-4" /> Chats/Groups
+                        </Button>
+                        <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+                            <DialogTrigger asChild>
+                                <Button><Plus className="mr-2 h-4 w-4" /> Create Group</Button>
+                            </DialogTrigger>
                         <DialogContent>
                             <DialogHeader>
                                 <DialogTitle>Create Farmer Group</DialogTitle>
@@ -118,7 +176,7 @@ const FarmerGroupsPage = () => {
                                     <Label>State *</Label>
                                     <Select
                                         value={newGroup.state}
-                                        onValueChange={(v) => setNewGroup(prev => ({ ...prev, state: v, district: "" }))}
+                                        onValueChange={(v) => setNewGroup(prev => ({ ...prev, state: v, district: "", taluka: "", village: "" }))}
                                     >
                                         <SelectTrigger><SelectValue placeholder="Select state" /></SelectTrigger>
                                         <SelectContent>
@@ -132,7 +190,7 @@ const FarmerGroupsPage = () => {
                                     <Label>District *</Label>
                                     <Select
                                         value={newGroup.district}
-                                        onValueChange={(v) => setNewGroup(prev => ({ ...prev, district: v }))}
+                                        onValueChange={(v) => setNewGroup(prev => ({ ...prev, district: v, taluka: "", village: "" }))}
                                         disabled={!newGroup.state}
                                     >
                                         <SelectTrigger><SelectValue placeholder={newGroup.state ? "Select district" : "Select state first"} /></SelectTrigger>
@@ -145,11 +203,57 @@ const FarmerGroupsPage = () => {
                                 </div>
                                 <div className="space-y-2">
                                     <Label>Taluka *</Label>
-                                    <Input required value={newGroup.taluka} onChange={(e) => setNewGroup(prev => ({ ...prev, taluka: e.target.value }))} placeholder="e.g. Haveli" />
+                                    <Select
+                                        value={newGroup.taluka}
+                                        onValueChange={(v) => setNewGroup(prev => ({ ...prev, taluka: v, village: "" }))}
+                                        disabled={!newGroup.state || !newGroup.district || locationsLoading}
+                                    >
+                                        <SelectTrigger>
+                                            <SelectValue
+                                                placeholder={
+                                                    !newGroup.district
+                                                        ? "Select district first"
+                                                        : locationsLoading
+                                                            ? "Loading talukas..."
+                                                            : availableTalukas.length === 0
+                                                                ? "No talukas found"
+                                                                : "Select taluka"
+                                                }
+                                            />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {availableTalukas.map((taluka) => (
+                                                <SelectItem key={taluka} value={taluka}>{taluka}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
                                 </div>
                                 <div className="space-y-2">
                                     <Label>Village</Label>
-                                    <Input value={newGroup.village} onChange={(e) => setNewGroup(prev => ({ ...prev, village: e.target.value }))} placeholder="e.g. Manjari (optional)" />
+                                    <Select
+                                        value={newGroup.village}
+                                        onValueChange={(v) => setNewGroup(prev => ({ ...prev, village: v }))}
+                                        disabled={!newGroup.taluka || locationsLoading}
+                                    >
+                                        <SelectTrigger>
+                                            <SelectValue
+                                                placeholder={
+                                                    !newGroup.taluka
+                                                        ? "Select taluka first"
+                                                        : locationsLoading
+                                                            ? "Loading villages..."
+                                                            : availableVillages.length === 0
+                                                                ? "No villages found"
+                                                                : "Select village (optional)"
+                                                }
+                                            />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {availableVillages.map((village) => (
+                                                <SelectItem key={village} value={village}>{village}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
                                 </div>
                                 <Button type="submit" className="w-full" disabled={createGroupMutation.isPending}>
                                     {createGroupMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
@@ -158,15 +262,24 @@ const FarmerGroupsPage = () => {
                             </form>
                         </DialogContent>
                     </Dialog>
+                    </div>
                 </div>
 
-                {isLoading ? (
+                <SearchBar 
+                    placeholder="Search by group name or location..." 
+                    onSearch={setSearchQuery} 
+                />
+
+                {isLoading || farmerProfileLoading ? (
                     <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
                 ) : !groups?.length ? (
                     <div className="bg-card rounded-xl border border-border p-12 text-center text-muted-foreground">No farmer groups available yet.</div>
+                ) : !filteredGroups?.length ? (
+                    <div className="bg-card rounded-xl border border-border p-12 text-center text-muted-foreground">No groups match your search.</div>
                 ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        {groups.map((group: any) => {
+                    <div className="space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {paginatedGroups.map((group: any) => {
                             const isMember = group.farmer_group_members?.some((m: any) => m.profile_id === profileId);
                             const hasRequested = group.requests?.some((r: any) => r.profile_id === profileId && r.status === 'pending');
                             const locationStr = [group.village, group.taluka, group.district, group.state].filter(Boolean).join(", ") || group.region;
@@ -212,6 +325,14 @@ const FarmerGroupsPage = () => {
                                 </div>
                             );
                         })}
+                        </div>
+                        <PaginationControls
+                            currentPage={currentPage}
+                            totalPages={totalPages}
+                            onPageChange={setCurrentPage}
+                            totalItems={filteredGroups.length}
+                            pageSize={PAGE_SIZE}
+                        />
                     </div>
                 )}
 

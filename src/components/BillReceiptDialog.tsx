@@ -1,4 +1,5 @@
-import React from "react";
+import React, { useMemo, useRef } from "react";
+import { useReactToPrint } from "react-to-print";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -102,6 +103,14 @@ const asNonEmptyString = (value: unknown): string | undefined => {
   return v.length ? v : undefined;
 };
 
+const deriveIdToken = (value: unknown): string => {
+  const source = String(value ?? "").trim();
+  if (!source) return "00000000";
+  const first = source.split("-")[0] || source;
+  const cleaned = first.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+  return (cleaned || source.replace(/[^A-Za-z0-9]/g, "").toUpperCase()).slice(0, 8).padEnd(8, "0");
+};
+
 const hasPartyData = (value: Record<string, unknown>) =>
   !!(value.full_name || value.name || value.email || value.phone || value.location || value.address);
 
@@ -166,18 +175,6 @@ const normalizeBillData = (raw: RawBillInput | BillData | null | undefined): Bil
   const buildAddressFromParts = (parts: Array<string | undefined>) =>
     parts.filter(Boolean).join(", ");
   
-  // Helper to extract city (district or village_city)
-  const extractCity = (profileData: any) => {
-    const district = profileData?.district;
-    const villageCity = profileData?.village_city;
-    return district ? String(district) : (villageCity ? String(villageCity) : undefined);
-  };
-
-  // Helper to extract state
-  const extractState = (profileData: any) => {
-    return profileData?.state ? String(profileData.state) : undefined;
-  };
-
   const buyerDistrict = pickPartyField(buyerSources, ["district"]);
   const buyerTaluka = pickPartyField(buyerSources, ["taluka"]);
   const buyerVillageCity = pickPartyField(buyerSources, ["village_city", "city"]);
@@ -257,7 +254,7 @@ const normalizeBillData = (raw: RawBillInput | BillData | null | undefined): Bil
           },
         ];
 
-  const billingId = raw.billingId ?? (rawObj.billId ? String(rawObj.billId) : null);
+  const billingId = raw.billingId ?? (rawObj.billId ? String(rawObj.billId) : (rawObj.transactionId ? String(rawObj.transactionId) : null));
   const transactionId = String(
     rawObj.transactionId
       ?? rawObj.transaction_id
@@ -266,8 +263,9 @@ const normalizeBillData = (raw: RawBillInput | BillData | null | undefined): Bil
       ?? billingId
       ?? "N/A"
   );
-  const receiptNumber = raw.receiptNumber ?? (billingId ? `RCPT-${String(billingId).slice(0, 8).toUpperCase()}` : `RCPT-${Date.now().toString().slice(-8)}`);
-  const invoiceNumber = raw.invoiceNumber ?? (billingId ? `INV-${String(billingId).slice(0, 8).toUpperCase()}` : undefined);
+  const idToken = deriveIdToken(billingId ?? transactionId);
+  const receiptNumber = raw.receiptNumber ?? `RCPT-${idToken}`;
+  const invoiceNumber = raw.invoiceNumber ?? `INV-${idToken}`;
 
   return {
     billingId,
@@ -278,7 +276,7 @@ const normalizeBillData = (raw: RawBillInput | BillData | null | undefined): Bil
     title: String(raw.title ?? rawObj.cropDetails ?? "Billing Item"),
     amount,
     currency,
-    date: raw.date ?? new Date().toLocaleDateString(),
+    date: raw.date ?? new Date().toLocaleDateString("en-GB"),
     dueDate: raw.dueDate,
     paymentStatus,
     paymentMethod: raw.paymentMethod ?? "Cash / Bank Transfer",
@@ -306,7 +304,7 @@ const partyAddressLine = (p: BillParty): string => {
     .split(",")
     .map((x) => x.trim())
     .filter(Boolean);
-  const structuredParts = [p.village_city, p.taluka, p.city, p.state, p.zipCode]
+  const structuredParts = [p.village_city, p.taluka, p.district, p.city, p.state, p.zipCode]
     .map((x) => (x ? String(x).trim() : ""))
     .filter(Boolean);
 
@@ -357,13 +355,13 @@ const buildPdf = (d: BillData) => {
   doc.setFont("helvetica", "bold");
   doc.setFontSize(22);
   doc.setTextColor(...WHITE);
-  doc.text("FarmDirect Connect", ML, 38);
+  doc.text("FARMER CONNECT", ML, 38);
 
   // Tagline
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
   doc.setTextColor(187, 247, 208);
-  doc.text("Farm-to-Market | Official Billing Receipt", ML, 52);
+  doc.text("official billing recipts", ML, 52);
 
   // Bill ID pill on right
   const billLabel = `BILL ID: ${d.billingId ? String(d.billingId).toUpperCase() : "N/A"}`;
@@ -636,40 +634,40 @@ const PartyCard = ({ party, label }: { party: BillParty; label: string }) => {
   const emailLine = party.email || "N/A";
   const phoneLine = party.phone || "N/A";
   return (
-    <div className="rounded-xl border border-green-500 bg-gray-950 overflow-hidden shadow-lg">
-      <div className="bg-green-900 px-4 py-3 border-b border-green-600">
-        <span className="text-xs font-bold tracking-widest text-green-400 uppercase">{label}</span>
+    <div className="rounded-xl border border-green-200 bg-white dark:border-green-800 dark:bg-zinc-900 overflow-hidden shadow-sm">
+      <div className="bg-green-50 dark:bg-green-950/40 px-4 py-3 border-b border-green-200 dark:border-green-800">
+        <span className="text-xs font-bold tracking-widest text-green-700 dark:text-green-300 uppercase">{label}</span>
       </div>
       <div className="p-4 space-y-4">
         {/* NAME */}
         <div>
-          <p className="text-xs font-bold tracking-widest text-green-400 uppercase mb-1">Name</p>
-          <p className="font-bold text-white text-lg">{party.name}</p>
+          <p className="text-xs font-bold tracking-widest text-green-700 dark:text-green-300 uppercase mb-1">Name</p>
+          <p className="font-bold text-zinc-900 dark:text-zinc-100 text-lg">{party.name}</p>
         </div>
 
         {/* ADDRESS */}
         <div>
-          <p className="text-xs font-bold tracking-widest text-green-400 uppercase mb-1">Address</p>
-          <div className="flex items-start gap-2 text-sm text-gray-300">
-            <MapPin className="h-4 w-4 mt-0.5 shrink-0 text-green-500" />
+          <p className="text-xs font-bold tracking-widest text-green-700 dark:text-green-300 uppercase mb-1">Address</p>
+          <div className="flex items-start gap-2 text-sm text-zinc-600 dark:text-zinc-300">
+            <MapPin className="h-4 w-4 mt-0.5 shrink-0 text-green-600 dark:text-green-400" />
             <span>{addressLine}</span>
           </div>
         </div>
 
         {/* EMAIL */}
         <div>
-          <p className="text-xs font-bold tracking-widest text-green-400 uppercase mb-1">Email</p>
-          <div className="flex items-center gap-2 text-sm text-gray-300">
-            <Mail className="h-4 w-4 shrink-0 text-green-500" />
+          <p className="text-xs font-bold tracking-widest text-green-700 dark:text-green-300 uppercase mb-1">Email</p>
+          <div className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-300">
+            <Mail className="h-4 w-4 shrink-0 text-green-600 dark:text-green-400" />
             <span className="break-all">{emailLine}</span>
           </div>
         </div>
 
         {/* MOBILE */}
         <div>
-          <p className="text-xs font-bold tracking-widest text-green-400 uppercase mb-1">Mobile</p>
-          <div className="flex items-center gap-2 text-sm text-gray-300">
-            <Phone className="h-4 w-4 shrink-0 text-green-500" />
+          <p className="text-xs font-bold tracking-widest text-green-700 dark:text-green-300 uppercase mb-1">Mobile</p>
+          <div className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-300">
+            <Phone className="h-4 w-4 shrink-0 text-green-600 dark:text-green-400" />
             <span>{phoneLine}</span>
           </div>
         </div>
@@ -699,7 +697,24 @@ export const BillReceiptDialog = ({
   isLoading,
   canMarkPaid,
 }: BillReceiptDialogProps) => {
-  const normalizedData = normalizeBillData(data ?? billData ?? billDetails);
+  const normalizedData = useMemo(
+    () => normalizeBillData(data ?? billData ?? billDetails),
+    [data, billData, billDetails]
+  );
+  const printRef = useRef<HTMLDivElement>(null);
+
+  // Using react-to-print for better print handling - must be called before early return
+  const handlePrintWithReactToPrint = useReactToPrint({
+    contentRef: printRef,
+    documentTitle: normalizedData ? `farmdirect-receipt-${(normalizedData.billingId ?? normalizedData.receiptNumber ?? "receipt").toString().replace(/\s+/g, "-")}` : "receipt",
+    onBeforePrint: async () => {
+      console.log("Preparing document for printing...");
+    },
+    onAfterPrint: async () => {
+      console.log("Print dialog closed");
+    },
+  });
+
   if (!normalizedData) return null;
 
   const resolvedOpen = open ?? isOpen ?? false;
@@ -735,51 +750,15 @@ export const BillReceiptDialog = ({
   };
 
   const handlePrintPdf = () => {
-    try {
-      const printable = document.getElementById("printable-bill");
-      const token = (normalizedData.billingId ?? normalizedData.receiptNumber ?? "receipt")
-        .toString().replace(/\s+/g, "-");
-
-      const openPrintWindow = (pdf: jsPDF) => {
-        const blob = pdf.output("blob");
-        const blobUrl = URL.createObjectURL(blob);
-        const printWindow = window.open(blobUrl, "_blank", "width=1000,height=700");
-        if (printWindow && typeof printWindow.print === "function") {
-          setTimeout(() => { try { printWindow.print(); } catch { /* silent */ } }, 500);
-          setTimeout(() => URL.revokeObjectURL(blobUrl), 15000);
-        } else {
-          const link = document.createElement("a");
-          link.href = blobUrl;
-          link.download = `farmdirect-receipt-${token}.pdf`;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
-        }
-      };
-
-      if (printable) {
-        buildPdfFromElement(printable)
-          .then(openPrintWindow)
-          .catch((err) => {
-            console.warn("UI print PDF generation failed, using fallback PDF builder:", err);
-            openPrintWindow(buildPdf(normalizedData));
-          });
-        return;
-      }
-
-      openPrintWindow(buildPdf(normalizedData));
-    } catch (err) {
-      console.error("PDF print failed:", err);
-      alert("Could not generate PDF for printing. Check console for details.");
-    }
+    // Use react-to-print for native browser printing
+    handlePrintWithReactToPrint();
   };
 
   const isPaid = normalizedData.paymentStatus === "paid";
 
   return (
     <Dialog open={resolvedOpen} onOpenChange={resolvedOnOpenChange}>
-      <DialogContent className="w-[95vw] max-w-4xl max-h-[90vh] overflow-y-auto bg-gray-50 p-0">
+      <DialogContent className="w-[98vw] max-w-4xl max-h-[90vh] overflow-y-auto bg-gray-50 p-0">
         {/* ── Dialog header ── */}
         <DialogHeader className="px-6 pt-5 pb-0 print:hidden">
           <DialogTitle className="flex items-center gap-2.5 text-xl font-bold text-green-900">
@@ -794,7 +773,7 @@ export const BillReceiptDialog = ({
         </DialogHeader>
 
         {/* ══════════ PRINTABLE BODY ══════════ */}
-        <div id="printable-bill" className="mx-4 mb-4 mt-4 rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden print:mx-0 print:rounded-none print:border-none print:shadow-none">
+        <div ref={printRef} id="printable-bill" className="mx-4 mb-4 mt-4 rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden print:mx-0 print:rounded-none print:border-none print:shadow-none">
 
           {/* Header band */}
           <div className="bg-gradient-to-br from-green-900 via-green-800 to-green-700 px-6 py-5">
@@ -802,9 +781,9 @@ export const BillReceiptDialog = ({
               <div>
                 <div className="flex items-center gap-2 mb-1">
                   <Leaf className="h-5 w-5 text-green-300" />
-                  <h1 className="text-xl font-black text-white tracking-tight">FarmDirect Connect</h1>
+                  <h1 className="text-xl font-black text-white tracking-tight">FARMER CONNECT</h1>
                 </div>
-                <p className="text-green-300 text-xs font-medium tracking-wide">Farm-to-Market · Official Billing Receipt</p>
+                <p className="text-green-300 text-xs font-medium tracking-wide">official billing recipts</p>
               </div>
               <div className="text-right space-y-1.5">
                 <Badge
@@ -838,15 +817,15 @@ export const BillReceiptDialog = ({
             ))}
           </div>
 
-          <div className="p-6 space-y-6">
+          <div className="p-4 sm:p-6 space-y-5 sm:space-y-6">
             {/* ── Party cards ── */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               <PartyCard party={normalizedData.seller} label="Seller" />
               <PartyCard party={normalizedData.buyer} label="Buyer" />
             </div>
 
             {/* ── Transaction meta chips ── */}
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
               <MetaChip label="Transaction Type" value={normalizedData.transactionType} />
               <MetaChip label="Payment Method" value={normalizedData.paymentMethod ?? "N/A"} />
               <MetaChip label="Order Status" value={String(normalizedData.status).charAt(0).toUpperCase() + String(normalizedData.status).slice(1)} />
@@ -862,7 +841,7 @@ export const BillReceiptDialog = ({
 
             {/* ── Line items table ── */}
             <div className="rounded-xl overflow-hidden border border-gray-100">
-              <table className="w-full text-left border-collapse text-sm">
+              <table className="w-full text-left border-collapse text-xs sm:text-sm">
                 <thead>
                   <tr className="bg-green-900 text-white">
                     <th className="px-4 py-3 font-semibold text-xs tracking-wider uppercase text-green-200">Description</th>
@@ -939,12 +918,12 @@ export const BillReceiptDialog = ({
         </div>
 
         {/* ── Action buttons ── */}
-        <div className="flex flex-wrap justify-end gap-2 px-6 pb-5 print:hidden">
-          <Button variant="outline" size="sm" onClick={handleDownloadPdf} className="border-green-200 text-green-800 hover:bg-green-50">
+        <div className="flex flex-col sm:flex-row sm:flex-wrap sm:justify-end gap-2 px-4 sm:px-6 pb-5 print:hidden">
+          <Button variant="outline" size="sm" onClick={handleDownloadPdf} className="w-full sm:w-auto border-green-200 text-green-800 hover:bg-green-50">
             <Download className="mr-2 h-4 w-4" /> Download Bill PDF
           </Button>
 
-          <Button size="sm" onClick={handlePrintPdf} className="bg-green-700 hover:bg-green-800 text-white">
+          <Button size="sm" onClick={handlePrintPdf} className="w-full sm:w-auto bg-green-700 hover:bg-green-800 text-white">
             <Printer className="mr-2 h-4 w-4" /> Print Bill
           </Button>
 
@@ -953,7 +932,7 @@ export const BillReceiptDialog = ({
               size="sm"
               onClick={resolvedOnMarkPaid}
               disabled={resolvedIsLoading}
-              className="bg-green-700 hover:bg-green-800 text-white"
+              className="w-full sm:w-auto bg-green-700 hover:bg-green-800 text-white"
             >
               <CheckCircle className="mr-2 h-4 w-4" />
               {resolvedIsLoading ? "Processing…" : "Confirm Payment & Mark Paid"}
@@ -961,7 +940,7 @@ export const BillReceiptDialog = ({
           )}
 
           {isPaid && (
-            <Button disabled variant="secondary" size="sm" className="bg-green-50 text-green-700 border border-green-200 opacity-100 cursor-default">
+            <Button disabled variant="secondary" size="sm" className="w-full sm:w-auto bg-green-50 text-green-700 border border-green-200 opacity-100 cursor-default">
               <CheckCircle className="mr-2 h-4 w-4" />
               Payment Completed
             </Button>

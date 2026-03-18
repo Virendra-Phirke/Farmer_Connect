@@ -9,9 +9,8 @@ export function useGroupMessages(groupId: string) {
     useEffect(() => {
         if (!groupId) return;
 
-        const channel = subscribeToGroupMessages(groupId, (payload) => {
-            // Invalidate the query to fetch the new message with sender details
-            // Alternatively, we could optimistically update the cache, but fetching is simpler and ensures we get the joined sender data
+        const channel = subscribeToGroupMessages(groupId, () => {
+            // Re-fetch immediately on every realtime event so users receive new messages without refresh.
             queryClient.invalidateQueries({ queryKey: ["group-messages", groupId] });
         });
 
@@ -24,6 +23,9 @@ export function useGroupMessages(groupId: string) {
         queryKey: ["group-messages", groupId],
         queryFn: () => getGroupMessages(groupId),
         enabled: !!groupId,
+        refetchOnWindowFocus: true,
+        refetchOnReconnect: true,
+        refetchInterval: 5000,
     });
 }
 

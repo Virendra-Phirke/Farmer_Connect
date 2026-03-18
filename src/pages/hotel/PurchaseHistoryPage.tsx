@@ -5,6 +5,7 @@ import { usePurchaseRequests } from "@/hooks/usePurchaseRequests";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Loader2, ShoppingCart, Check, X, Clock, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SearchBar } from "@/components/SearchBar";
 import { BillReceiptDialog } from "@/components/BillReceiptDialog";
 
 const PurchaseHistoryPage = () => {
@@ -12,12 +13,13 @@ const PurchaseHistoryPage = () => {
     const [profileId, setProfileId] = useState<string | null>(null);
     const [isBillOpen, setIsBillOpen] = useState(false);
     const [selectedRequest, setSelectedRequest] = useState<any>(null);
+    const [searchQuery, setSearchQuery] = useState("");
 
     const showBill = (req: any) => {
         const cropName = req.crop_listing?.crop_name || "Crop";
-        const computedAmount = req.total_amount || (req.quantity_kg * req.offered_price);
         const quantity = Number(req.quantity_kg || 0);
         const unitPrice = Number(req.offered_price || 0);
+        const computedAmount = Number(req.total_amount ?? (quantity * unitPrice));
         const billId = req.billing_id || `INV-${req.id.slice(0, 8).toUpperCase()}`;
 
         setSelectedRequest({
@@ -30,6 +32,7 @@ const PurchaseHistoryPage = () => {
             date: new Date(req.created_at || new Date()).toLocaleDateString(),
             amount: computedAmount,
             paymentStatus: req.payment_status || "unpaid",
+            paymentConfirmedAt: req.payment_status === "paid" ? new Date(req.updated_at || req.created_at).toLocaleString() : undefined,
             status: req.status || "accepted",
             buyer: {
                 id: req.buyer?.id || profileId || undefined,
@@ -47,7 +50,7 @@ const PurchaseHistoryPage = () => {
                 name: req.crop_listing?.farmer?.full_name || "Farmer",
                 phone: req.crop_listing?.farmer?.phone,
                 email: req.crop_listing?.farmer?.email,
-                address: req.crop_listing?.location,
+                address: req.crop_listing?.farmer?.location || req.crop_listing?.location,
                 state: req.crop_listing?.farmer?.state,
                 district: req.crop_listing?.farmer?.district,
                 taluka: req.crop_listing?.farmer?.taluka,
@@ -79,6 +82,12 @@ const PurchaseHistoryPage = () => {
         { enabled: !!profileId }
     );
 
+    // Filter by search query
+    const filteredRequests = requests?.filter((req: any) =>
+        req.crop_listing?.crop_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        req.crop_listing?.farmer?.full_name?.toLowerCase().includes(searchQuery.toLowerCase())
+    ) || [];
+
     const getStatusBadge = (status: string) => {
         switch (status) {
             case "accepted": return <span className="inline-flex items-center gap-1 text-green-600 bg-green-50 px-2 py-1 rounded-md text-sm font-medium"><Check className="h-4 w-4" /> Accepted</span>;
@@ -94,14 +103,21 @@ const PurchaseHistoryPage = () => {
             <div className="space-y-6">
                 <h2 className="text-xl font-bold flex items-center gap-2"><ShoppingCart className="h-6 w-6" /> Purchase History</h2>
 
+                <SearchBar 
+                    placeholder="Search by crop name or farmer..." 
+                    onSearch={setSearchQuery} 
+                />
+
                 {isLoading ? (
                     <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
                 ) : !requests?.length ? (
                     <div className="bg-card rounded-xl border border-border p-12 text-center text-muted-foreground">You haven't requested to buy any produce yet.</div>
+                ) : !filteredRequests?.length ? (
+                    <div className="bg-card rounded-xl border border-border p-12 text-center text-muted-foreground">No purchases match your search.</div>
                 ) : (
                     <div className="space-y-4">
-                        {requests.map((req: any) => (
-                            <div key={req.id} className="bg-card rounded-xl border border-border p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        {filteredRequests.map((req: any) => (
+                            <div key={req.id} className="bg-card rounded-xl border border-border p-4 sm:p-6 flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4">
                                 <div>
                                     <div className="flex items-center gap-2 mb-1">
                                         <p className="font-semibold text-lg">{req.crop_listing?.crop_name || "Crop"} <span className="text-muted-foreground font-normal text-sm">from {req.crop_listing?.farmer?.full_name || "Unknown Farmer"}</span></p>
@@ -116,7 +132,7 @@ const PurchaseHistoryPage = () => {
                                         )}
                                     </div>
                                     <p className="font-medium mt-1">Requested Qty: {req.quantity_kg} kg @ ₹{req.offered_price}/kg</p>
-                                    <p className="text-sm mt-1">Total Amount: <span className="font-semibold text-foreground">₹{req.total_amount || (req.quantity_kg * req.offered_price)}</span></p>
+                                    <p className="text-sm mt-1">Total Amount: <span className="font-semibold text-foreground">₹{Number(req.total_amount ?? (Number(req.quantity_kg || 0) * Number(req.offered_price || 0)))}</span></p>
                                     {req.message && <p className="text-sm mt-1 text-muted-foreground">Note: {req.message}</p>}
                                 </div>
                                 <div className="flex flex-col items-end gap-2">

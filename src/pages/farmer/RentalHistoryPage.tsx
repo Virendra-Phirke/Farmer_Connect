@@ -6,6 +6,7 @@ import { getEquipmentPaymentStatus } from "@/lib/api/equipment-bookings";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Loader2, CalendarCheck, Check, X, Clock, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SearchBar } from "@/components/SearchBar";
 import { BillReceiptDialog } from "@/components/BillReceiptDialog";
 import { useToast } from "@/hooks/use-toast";
 
@@ -14,6 +15,7 @@ const RentalHistoryPage = () => {
     const [profileId, setProfileId] = useState<string | null>(null);
     const [isBillOpen, setIsBillOpen] = useState(false);
     const [selectedBooking, setSelectedBooking] = useState<any>(null);
+    const [searchQuery, setSearchQuery] = useState("");
     const { toast } = useToast();
 
     const showBill = (booking: any) => {
@@ -79,6 +81,12 @@ const RentalHistoryPage = () => {
         { enabled: !!profileId }
     );
 
+    // Filter by search query
+    const filteredBookings = bookings?.filter((booking: any) =>
+        booking.equipment?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        booking.equipment?.owner?.full_name?.toLowerCase().includes(searchQuery.toLowerCase())
+    ) || [];
+
     const getStatusBadge = (status: string) => {
         switch (status) {
             case "confirmed": return <span className="inline-flex items-center gap-1 text-green-600 bg-green-50 px-2 py-1 rounded-md text-sm font-medium"><Check className="h-4 w-4" /> Confirmed</span>;
@@ -94,13 +102,20 @@ const RentalHistoryPage = () => {
             <div className="space-y-6">
                 <h2 className="text-xl font-bold flex items-center gap-2"><CalendarCheck className="h-6 w-6" /> Rental History</h2>
 
+                <SearchBar 
+                    placeholder="Search by equipment name or owner..." 
+                    onSearch={setSearchQuery} 
+                />
+
                 {isLoading ? (
                     <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
                 ) : !bookings?.length ? (
                     <div className="bg-card rounded-xl border border-border p-12 text-center text-muted-foreground">You haven't requested to rent any equipment yet.</div>
+                ) : !filteredBookings?.length ? (
+                    <div className="bg-card rounded-xl border border-border p-12 text-center text-muted-foreground">No rentals match your search.</div>
                 ) : (
                     <div className="space-y-4">
-                        {bookings.map((booking: any) => (
+                        {filteredBookings.map((booking: any) => (
                             <div key={booking.id} className="bg-card rounded-xl border border-border p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
                                 <div>
                                     <p className="font-semibold text-lg">{booking.equipment?.name || "Equipment"} <span className="text-muted-foreground text-sm font-normal">from {booking.equipment?.owner?.full_name || "Unknown Owner"}</span></p>

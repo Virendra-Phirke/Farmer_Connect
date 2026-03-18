@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Loader2, CalendarCheck, Check, X, Clock, FileText } from "lucide-react";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { SearchBar } from "@/components/SearchBar";
 import { BillReceiptDialog } from "@/components/BillReceiptDialog";
 
 const RentalRequestsPage = () => {
@@ -15,6 +16,7 @@ const RentalRequestsPage = () => {
     const [profileId, setProfileId] = useState<string | null>(null);
     const [isBillOpen, setIsBillOpen] = useState(false);
     const [selectedBooking, setSelectedBooking] = useState<any>(null);
+    const [searchQuery, setSearchQuery] = useState("");
 
     useEffect(() => {
         if (user?.id) getProfileId(user.id).then(setProfileId);
@@ -71,7 +73,7 @@ const RentalRequestsPage = () => {
                 name: booking.equipment?.owner?.full_name || user?.fullName || "Equipment Owner",
                 phone: booking.equipment?.owner?.phone || user?.phoneNumbers?.[0]?.phoneNumber,
                 email: booking.equipment?.owner?.email || user?.primaryEmailAddress?.emailAddress || undefined,
-                address: booking.equipment?.owner?.location,
+                address: booking.equipment?.owner?.location || booking.equipment?.location,
                 state: booking.equipment?.owner?.state,
                 district: booking.equipment?.owner?.district,
                 taluka: booking.equipment?.owner?.taluka,
@@ -99,10 +101,26 @@ const RentalRequestsPage = () => {
     const pendingBookings = bookings?.filter((b: any) => b.status === "pending") || [];
     const historyBookings = bookings?.filter((b: any) => b.status !== "pending") || [];
 
+    // Filter by search query
+    const filteredPendingBookings = pendingBookings.filter((booking: any) =>
+        booking.equipment?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        booking.renter?.full_name?.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+
+    const filteredHistoryBookings = historyBookings.filter((booking: any) =>
+        booking.equipment?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        booking.renter?.full_name?.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+
     return (
         <DashboardLayout subtitle="View and respond to rental requests for your equipment.">
             <div className="space-y-6">
                 <h2 className="text-xl font-bold flex items-center gap-2"><CalendarCheck className="h-6 w-6" /> Rental Requests</h2>
+
+                <SearchBar 
+                    placeholder="Search by equipment name or renter..." 
+                    onSearch={setSearchQuery} 
+                />
 
                 {isLoading ? (
                     <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
@@ -116,9 +134,11 @@ const RentalRequestsPage = () => {
                         <TabsContent value="pending">
                             {!pendingBookings.length ? (
                                 <div className="bg-card rounded-xl border border-border p-12 text-center text-muted-foreground">No pending rental requests.</div>
+                            ) : !filteredPendingBookings.length ? (
+                                <div className="bg-card rounded-xl border border-border p-12 text-center text-muted-foreground">No pending requests match your search.</div>
                             ) : (
                                 <div className="space-y-4">
-                                    {pendingBookings.map((booking: any) => (
+                                    {filteredPendingBookings.map((booking: any) => (
                                         <div key={booking.id} className="bg-card rounded-xl border border-border p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
                                             <div>
                                                 <p className="font-semibold">Item: {booking.equipment?.name || "Equipment"}</p>
@@ -141,9 +161,11 @@ const RentalRequestsPage = () => {
                         <TabsContent value="history">
                             {!historyBookings.length ? (
                                 <div className="bg-card rounded-xl border border-border p-12 text-center text-muted-foreground">No rental history found.</div>
+                            ) : !filteredHistoryBookings.length ? (
+                                <div className="bg-card rounded-xl border border-border p-12 text-center text-muted-foreground">No history matches your search.</div>
                             ) : (
                                 <div className="space-y-4">
-                                    {historyBookings.map((booking: any) => (
+                                    {filteredHistoryBookings.map((booking: any) => (
                                         <div key={booking.id} className="bg-card border border-border p-6 flex justify-between gap-4 opacity-75">
                                             <div>
                                                 <p className="font-semibold">Item: {booking.equipment?.name || "Equipment"}</p>

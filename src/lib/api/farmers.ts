@@ -64,7 +64,7 @@ export async function getFarmerProfile(profileId: string) {
     const { data, error } = await (supabase as any)
         .from("farmer_profiles")
         .select("*")
-        .eq("id", profileId)
+        .eq("profile_id", profileId)
         .maybeSingle();
 
     if (error) {

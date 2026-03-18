@@ -11,6 +11,7 @@ import {
   requestToJoinFarmerGroup,
   getFarmerGroupRequests,
   updateFarmerGroupRequest,
+  getOrCreateDirectFarmerChat,
   FarmerGroupInsert,
 } from "@/lib/api";
 
@@ -134,6 +135,20 @@ export function useUpdateFarmerGroupRequest() {
       queryClient.invalidateQueries({ queryKey: ["farmer-group-requests"] });
       queryClient.invalidateQueries({ queryKey: ["farmer-groups"] });
       queryClient.invalidateQueries({ queryKey: ["farmer-group"] });
+    },
+  });
+}
+
+export function useGetOrCreateDirectFarmerChat() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ currentProfileId, targetProfileId, targetName }: { currentProfileId: string; targetProfileId: string; targetName?: string | null }) =>
+      getOrCreateDirectFarmerChat(currentProfileId, targetProfileId, targetName),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["farmer-groups"] });
+      queryClient.invalidateQueries({ queryKey: ["farmer-group"] });
+      queryClient.invalidateQueries({ queryKey: ["user-groups"] });
     },
   });
 }

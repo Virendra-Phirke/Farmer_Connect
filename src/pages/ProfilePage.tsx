@@ -22,16 +22,16 @@ const ProfilePage = () => {
     const [isSaving, setIsSaving] = useState(false);
     const [profileId, setProfileId] = useState<string | null>(null);
 
-    const [fullName, setFullName] = useState("");
-    const [email, setEmail] = useState("");
     const [phone, setPhone] = useState("");
     const [availableEquipment, setAvailableEquipment] = useState("");
+    const [errors, setErrors] = useState<Record<string, string>>({});
 
     // Structured location fields (for all user types)
     const [state, setState] = useState("");
     const [district, setDistrict] = useState("");
     const [subDistrict, setSubDistrict] = useState("");
     const [villageCity, setVillageCity] = useState("");
+    const [landmark, setLandmark] = useState("");
 
     // Use Indian Locations Hook
     const { states, districts, subDistricts, villages, isLoading: locationsLoading } = useIndianLocations(state, district, subDistrict);
@@ -59,8 +59,6 @@ const ProfilePage = () => {
 
             if (profileData) {
                 setProfile(profileData);
-                setFullName(profileData.full_name || user.fullName || "");
-                setEmail(profileData.email || user.primaryEmailAddress?.emailAddress || "");
                 setPhone(profileData.phone || "");
                 setAvailableEquipment(profileData.available_equipment || "");
 
@@ -69,28 +67,109 @@ const ProfilePage = () => {
                 setDistrict(profileData.district || "");
                 setSubDistrict(profileData.taluka || "");
                 setVillageCity(profileData.village_city || "");
+                setLandmark(profileData.landmark || "");
             }
             setIsLoading(false);
         }
         load();
     }, [user?.id]);
 
+    const validateForm = () => {
+        const nextErrors: Record<string, string> = {};
+        const phoneDigits = phone.replace(/\D/g, "");
+
+        if (!phone.trim()) {
+            nextErrors.phone = "Phone is required";
+        } else if (!(phoneDigits.length === 10 || (phoneDigits.length === 12 && phoneDigits.startsWith("91")))) {
+            nextErrors.phone = "Enter a valid 10-digit Indian mobile number";
+        }
+
+        if (!state.trim()) nextErrors.state = "State is required";
+        if (!district.trim()) nextErrors.district = "District is required";
+        if (!subDistrict.trim()) nextErrors.subDistrict = "Taluka is required";
+        if (!villageCity.trim()) nextErrors.villageCity = "Village / City is required";
+        if (!landmark.trim()) nextErrors.landmark = "Landmark is required";
+
+        if (role === "equipment_owner" && !availableEquipment.trim()) {
+            nextErrors.availableEquipment = "Available equipment is required";
+        }
+
+        setErrors(nextErrors);
+        return Object.keys(nextErrors).length === 0;
+    };
+
     const handleSave = async () => {
         if (!user?.id) return;
+        if (!validateForm()) {
+            toast.error("Please fill all required fields with valid values");
+            return;
+        }
         setIsSaving(true);
         try {
-            await updateUserProfile(user.id, {
-                full_name: fullName || null,
-                phone: phone || null,
-                // Equipment for farmer and equipment owners
-                available_equipment: (role === "farmer" || role === "equipment_owner") ? (availableEquipment || null) : null,
-                // Structured location for all users
-                state: state || null,
-                district: district || null,
-                taluka: subDistrict || null,
-                village_city: villageCity || null,
-                location: [villageCity, subDistrict, district, state].filter(Boolean).join(', ') || null,
-            });
+            // Build updates object - ONLY include fields that actually changed
+            // CRITICAL: Use undefined to skip fields, NOT null!
+            const updates: Record<string, any> = {};
+            const normalizedPhone = phone.replace(/\D/g, "").slice(-10);
+            
+            // Only update phone if it actually changed
+            if (normalizedPhone !== ((profile?.phone || "").replace(/\D/g, "").slice(-10))) {
+                // Only send phone if it has a value; otherwise skip
+                if (normalizedPhone) {
+                    updates.phone = normalizedPhone;
+                } else {
+                    // Don't update phone if user cleared it (keep existing value)
+                    // Only set to explicit value if different and non-empty
+                }
+            }
+            
+            // Only update location fields if they changed
+            if (state !== (profile?.state || "")) {
+                if (state.trim()) updates.state = state;
+            }
+            if (district !== (profile?.district || "")) {
+                if (district.trim()) updates.district = district;
+            }
+            if (subDistrict !== (profile?.taluka || "")) {
+                if (subDistrict.trim()) updates.taluka = subDistrict;
+            }
+            if (villageCity !== (profile?.village_city || "")) {
+                if (villageCity.trim()) updates.village_city = villageCity;
+            }
+            if (landmark !== (profile?.landmark || "")) {
+                if (landmark.trim()) updates.landmark = landmark;
+            }
+            
+            // Only update location composite if location fields changed
+            const newLocation = [landmark, villageCity, subDistrict, district, state].filter(Boolean).join(', ');
+            if (newLocation !== (profile?.location || "")) {
+                updates.location = newLocation;
+            }
+            
+            // Only update equipment if it changed
+            const equipmentValue = role === "equipment_owner" ? availableEquipment : undefined;
+            if (equipmentValue !== (profile?.available_equipment || "")) {
+                if (equipmentValue) {
+                    updates.available_equipment = equipmentValue;
+                }
+            }
+            
+            // Only send update if something actually changed
+            if (Object.keys(updates).length === 0) {
+                toast.info("No changes to save");
+                setIsSaving(false);
+                return;
+            }
+            
+            await updateUserProfile(user.id, updates);
+            
+            // Refresh the profile data from database to ensure all changes persisted
+            const updatedProfile = await getUserProfile(user.id);
+            if (updatedProfile) {
+                setProfile(updatedProfile);
+                setPhone(updatedProfile.phone || "");
+                setAvailableEquipment(updatedProfile.available_equipment || "");
+            }
+            
             toast.success("Profile saved successfully!");
         } catch (error) {
             console.error("Profile save error:", error);
@@ -119,15 +198,18 @@ const ProfilePage = () => {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="space-y-2">
                             <Label htmlFor="fullName">Full Name</Label>
-                            <Input id="fullName" value={fullName} onChange={e => setFullName(e.target.value)} />
+                            <Input id="fullName" value={user?.fullName || profile?.full_name || ""} disabled className="opacity-60" />
+                            <p className="text-xs text-muted-foreground">Managed by Clerk</p>
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="email">Email</Label>
-                            <Input id="email" value={email} disabled className="opacity-60" />
+                            <Input id="email" value={user?.primaryEmailAddress?.emailAddress || profile?.email || ""} disabled className="opacity-60" />
+                            <p className="text-xs text-muted-foreground">Managed by Clerk</p>
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="phone">Phone</Label>
-                            <Input id="phone" value={phone} onChange={e => setPhone(e.target.value)} placeholder="+91..." />
+                            <Input id="phone" value={phone} onChange={e => { setPhone(e.target.value); setErrors(prev => ({ ...prev, phone: "" })); }} placeholder="Enter 10-digit mobile number" maxLength={14} />
+                            {errors.phone && <p className="text-xs text-destructive">{errors.phone}</p>}
                         </div>
                     </div>
                 </section>
@@ -138,7 +220,13 @@ const ProfilePage = () => {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="space-y-2">
                             <Label htmlFor="state">State</Label>
-                            <Select value={state} onValueChange={setState}>
+                            <Select value={state} onValueChange={(value) => {
+                                setState(value);
+                                setDistrict("");
+                                setSubDistrict("");
+                                setVillageCity("");
+                                setErrors(prev => ({ ...prev, state: "" }));
+                            }}>
                                 <SelectTrigger id="state">
                                     <SelectValue placeholder="Select State" />
                                 </SelectTrigger>
@@ -148,10 +236,16 @@ const ProfilePage = () => {
                                     ))}
                                 </SelectContent>
                             </Select>
+                            {errors.state && <p className="text-xs text-destructive">{errors.state}</p>}
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="district">District</Label>
-                            <Select value={district} onValueChange={setDistrict} disabled={!state || locationsLoading}>
+                            <Select value={district} onValueChange={(value) => {
+                                setDistrict(value);
+                                setSubDistrict("");
+                                setVillageCity("");
+                                setErrors(prev => ({ ...prev, district: "" }));
+                            }} disabled={!state || locationsLoading}>
                                 <SelectTrigger id="district">
                                     <SelectValue placeholder="Select District" />
                                 </SelectTrigger>
@@ -161,10 +255,15 @@ const ProfilePage = () => {
                                     ))}
                                 </SelectContent>
                             </Select>
+                            {errors.district && <p className="text-xs text-destructive">{errors.district}</p>}
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="subdistrict">Taluka / Sub-District</Label>
-                            <Select value={subDistrict} onValueChange={setSubDistrict} disabled={!district || locationsLoading}>
+                            <Select value={subDistrict} onValueChange={(value) => {
+                                setSubDistrict(value);
+                                setVillageCity("");
+                                setErrors(prev => ({ ...prev, subDistrict: "" }));
+                            }} disabled={!district || locationsLoading}>
                                 <SelectTrigger id="subdistrict">
                                     <SelectValue placeholder="Select Taluka" />
                                 </SelectTrigger>
@@ -174,10 +273,14 @@ const ProfilePage = () => {
                                     ))}
                                 </SelectContent>
                             </Select>
+                            {errors.subDistrict && <p className="text-xs text-destructive">{errors.subDistrict}</p>}
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="village">Village / City</Label>
-                            <Select value={villageCity} onValueChange={setVillageCity} disabled={!subDistrict || locationsLoading}>
+                            <Select value={villageCity} onValueChange={(value) => {
+                                setVillageCity(value);
+                                setErrors(prev => ({ ...prev, villageCity: "" }));
+                            }} disabled={!subDistrict || locationsLoading}>
                                 <SelectTrigger id="village">
                                     <SelectValue placeholder="Select Village / City" />
                                 </SelectTrigger>
@@ -187,6 +290,12 @@ const ProfilePage = () => {
                                     ))}
                                 </SelectContent>
                             </Select>
+                            {errors.villageCity && <p className="text-xs text-destructive">{errors.villageCity}</p>}
+                        </div>
+                        <div className="space-y-2 md:col-span-2">
+                            <Label htmlFor="landmark">Landmark</Label>
+                            <Input id="landmark" value={landmark} onChange={e => { setLandmark(e.target.value); setErrors(prev => ({ ...prev, landmark: "" })); }} placeholder="Near temple / school / main road" />
+                            {errors.landmark && <p className="text-xs text-destructive">{errors.landmark}</p>}
                         </div>
                     </div>
                 </section>
@@ -220,10 +329,18 @@ const ProfilePage = () => {
                         <div className="grid grid-cols-1 gap-4">
                             <div className="space-y-2">
                                 <Label htmlFor="equipmentDesc">General Available Equipment Description</Label>
-                                <Input id="equipmentDesc" value={availableEquipment} onChange={e => setAvailableEquipment(e.target.value)} placeholder="e.g. Fleet of 5 Tractors" />
+                                <Input id="equipmentDesc" value={availableEquipment} onChange={e => { setAvailableEquipment(e.target.value); setErrors(prev => ({ ...prev, availableEquipment: "" })); }} placeholder="e.g. Fleet of 5 Tractors" />
+                                {errors.availableEquipment && <p className="text-xs text-destructive">{errors.availableEquipment}</p>}
                                 <p className="text-xs text-muted-foreground mt-1">Use the 'My Equipment' dashboard page to list individual items for rent.</p>
                             </div>
                         </div>
+                    </section>
+                )}
+
+                {role === "hotel_restaurant_manager" && (
+                    <section className="bg-card rounded-xl border border-border p-6 space-y-2">
+                        <h2 className="font-display text-xl font-semibold">Hotel / Restaurant Details</h2>
+                        <p className="text-sm text-muted-foreground">Please ensure phone and all location fields are completed before saving.</p>
                     </section>
                 )}
 

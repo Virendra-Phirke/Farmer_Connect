@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useUser } from "@clerk/clerk-react";
 import { getProfileId } from "@/lib/supabase-auth";
 import { useFarmerPurchaseRequests, useUpdatePurchaseRequest } from "@/hooks/usePurchaseRequests";
@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Loader2, ShoppingCart, Check, X, FileText } from "lucide-react";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { SearchBar } from "@/components/SearchBar";
 import BillReceiptDialog from "@/components/BillReceiptDialog";
 
 const PurchaseRequestsPage = () => {
@@ -14,6 +15,7 @@ const PurchaseRequestsPage = () => {
     const [profileId, setProfileId] = useState<string | null>(null);
     const [selectedBill, setSelectedBill] = useState<any>(null);
     const [isBillOpen, setIsBillOpen] = useState(false);
+    const [searchQuery, setSearchQuery] = useState("");
 
     useEffect(() => {
         if (user?.id) getProfileId(user.id).then(setProfileId);
@@ -23,14 +25,44 @@ const PurchaseRequestsPage = () => {
     const { data: requests, isLoading } = useFarmerPurchaseRequests(profileId || "");
     const updateMutation = useUpdatePurchaseRequest();
 
-    const pendingRequests = requests?.filter((req: any) => req.status === "pending") || [];
-    const historyRequests = requests?.filter((req: any) => req.status !== "pending") || [];
+    const pendingRequests = useMemo(
+        () => requests?.filter((req: any) => req.status === "pending") || [],
+        [requests]
+    );
+    const historyRequests = useMemo(
+        () => requests?.filter((req: any) => req.status !== "pending") || [],
+        [requests]
+    );
+
+    // Filter by search query
+    const filteredPendingRequests = useMemo(
+        () => pendingRequests.filter((req: any) =>
+            req.crop_listing?.crop_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            req.buyer?.full_name?.toLowerCase().includes(searchQuery.toLowerCase())
+        ),
+        [pendingRequests, searchQuery]
+    );
+
+    const filteredHistoryRequests = useMemo(
+        () => historyRequests.filter((req: any) =>
+            req.crop_listing?.crop_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            req.buyer?.full_name?.toLowerCase().includes(searchQuery.toLowerCase())
+        ),
+        [historyRequests, searchQuery]
+    );
 
     const handleAccept = (req: any) => {
         updateMutation.mutate({ id: req.id, updates: { status: "accepted", payment_status: "unpaid" } }, {        
             onSuccess: (updatedData: any) => {
                 toast.success("Request accepted! Bill generated.");
-                showBill(req, "unpaid", updatedData?.billing_id || req.billing_id);
+                const mergedRequest = {
+                    ...req,
+                    ...updatedData,
+                    status: "accepted",
+                    payment_status: "unpaid",
+                    billing_id: updatedData?.billing_id || req.billing_id,
+                };
+                showBill(mergedRequest, "unpaid", mergedRequest.billing_id);
             },
             onError: () => toast.error("Failed to update"),
         });
@@ -67,9 +99,9 @@ const PurchaseRequestsPage = () => {
         const buyerTaluka = req.buyer?.taluka || undefined;
         const buyerVillageCity = req.buyer?.village_city || undefined;
         const cropName = req.crop_listing?.crop_name || "Crop";
-        const computedAmount = req.total_amount || (req.quantity_kg * req.offered_price);
         const quantity = Number(req.quantity_kg || 0);
         const unitPrice = Number(req.offered_price || 0);
+        const computedAmount = Number(req.total_amount ?? (quantity * unitPrice));
         const billId = billingIdOverride || req.billing_id || `INV-PR-${req.id.slice(0, 8).toUpperCase()}`;
 
         // Get seller data - prefer crop_listing.farmer, fallback to current user
@@ -143,6 +175,11 @@ const PurchaseRequestsPage = () => {
             <div className="space-y-6">
                 <h2 className="text-xl font-bold flex items-center gap-2"><ShoppingCart className="h-6 w-6" /> Purchase Requests</h2>
 
+                <SearchBar 
+                    placeholder="Search by crop name or buyer..." 
+                    onSearch={setSearchQuery} 
+                />
+
                 {isLoading ? (
                     <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
                 ) : (
@@ -155,10 +192,12 @@ const PurchaseRequestsPage = () => {
                         <TabsContent value="pending">
                             {!pendingRequests.length ? (
                                 <div className="bg-card rounded-xl border border-border p-12 text-center text-muted-foreground">No pending purchase requests.</div>
+                            ) : !filteredPendingRequests.length ? (
+                                <div className="bg-card rounded-xl border border-border p-12 text-center text-muted-foreground">No pending requests match your search.</div>
                             ) : (
                                 <div className="space-y-4">
-                                    {pendingRequests.map((req: any) => (
-                                        <div key={req.id} className="bg-card rounded-xl border border-border p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                    {filteredPendingRequests.map((req: any) => (
+                                        <div key={req.id} className="bg-card rounded-xl border border-border p-4 sm:p-6 flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4">
                                             <div>
                                                 <p className="font-semibold">Item: {req.crop_listing?.crop_name || "Crop"}</p>
                                                 <p className="text-sm">Qty: {req.quantity_kg} kg @ ₹{req.offered_price}/kg</p>
@@ -179,10 +218,12 @@ const PurchaseRequestsPage = () => {
                         <TabsContent value="history">
                             {!historyRequests.length ? (
                                 <div className="bg-card rounded-xl border border-border p-12 text-center text-muted-foreground">No purchase history found.</div>
+                            ) : !filteredHistoryRequests.length ? (
+                                <div className="bg-card rounded-xl border border-border p-12 text-center text-muted-foreground">No history requests match your search.</div>
                             ) : (
                                 <div className="space-y-4">
-                                    {historyRequests.map((req: any) => (
-                                        <div key={req.id} className="bg-card border border-border p-6 flex flex-col sm:flex-row justify-between gap-4">
+                                    {filteredHistoryRequests.map((req: any) => (
+                                        <div key={req.id} className="bg-card border border-border p-4 sm:p-6 flex flex-col sm:flex-row justify-between gap-3 sm:gap-4">
                                             <div>
                                                 <div className="flex items-center gap-2 mb-1">
                                                     <p className="font-semibold">{req.crop_listing?.crop_name || "Crop"} • {req.quantity_kg} kg @ ₹{req.offered_price}/kg</p>
@@ -197,7 +238,7 @@ const PurchaseRequestsPage = () => {
                                                         </span>
                                                     )}
                                                 </div>
-                                                <p className="text-sm text-foreground/80 mb-2">Total Amount: <span className="font-semibold">₹{req.total_amount || (req.quantity_kg * req.offered_price)}</span></p>
+                                                <p className="text-sm text-foreground/80 mb-2">Total Amount: <span className="font-semibold">₹{Number(req.total_amount ?? (Number(req.quantity_kg || 0) * Number(req.offered_price || 0)))}</span></p>
                                                 <div className="text-xs text-muted-foreground flex flex-col gap-1">
                                                     <p>Buyer: {req.buyer?.full_name || 'Individual Buyer'}</p>
                                                     <p>Phone: {req.buyer?.phone || 'N/A'}</p>

@@ -17,7 +17,7 @@ export function useSupplyContracts(filters?: {
     farmer_id?: string;
     status?: string;
     crop_name?: string;
-}, options?: { enabled?: boolean }) {
+}, options?: { enabled?: boolean; refetchInterval?: number | false }) {
     const idFilter = filters?.farmer_id ?? filters?.buyer_id;
     const hasIdFilter = "farmer_id" in (filters ?? {}) || "buyer_id" in (filters ?? {});
 
@@ -25,6 +25,7 @@ export function useSupplyContracts(filters?: {
         queryKey: ["supply-contracts", filters],
         queryFn: () => getSupplyContracts(filters),
         enabled: options?.enabled !== undefined ? options.enabled : (!hasIdFilter || !!idFilter),
+        refetchInterval: options?.refetchInterval,
     });
 }
 

@@ -12,6 +12,15 @@ const getGroupKey = (groupId: string) => {
 };
 
 /**
+ * Derives a stable encryption key for direct chats between two profiles.
+ * Sorting keeps key generation deterministic for both sender and receiver.
+ */
+const getDirectKey = (profileA: string, profileB: string) => {
+    const [a, b] = [String(profileA || ""), String(profileB || "")].sort();
+    return `${MASTER_KEY}_direct_${a}_${b}`;
+};
+
+/**
  * Encrypts a plaintext message using AES.
  * @param text The raw message
  * @param groupId The ID of the group the message is being sent to
@@ -43,6 +52,35 @@ export const decryptMessage = (encryptedText: string, groupId: string): string =
         return decrypted || encryptedText; // If decryption fails (e.g. it was never encrypted), return original
     } catch (error) {
         // Not all messages will be encrypted (especially old ones), so fail gracefully
+        return encryptedText;
+    }
+};
+
+/**
+ * Encrypts a direct chat message using a stable peer-to-peer key.
+ */
+export const encryptDirectMessage = (text: string, senderId: string, receiverId: string): string => {
+    try {
+        if (!text || !senderId || !receiverId) return text;
+        const key = getDirectKey(senderId, receiverId);
+        return CryptoJS.AES.encrypt(text, key).toString();
+    } catch (error) {
+        console.error("Direct message encryption failed:", error);
+        return text;
+    }
+};
+
+/**
+ * Decrypts a direct chat message back to plaintext.
+ */
+export const decryptDirectMessage = (encryptedText: string, profileA: string, profileB: string): string => {
+    try {
+        if (!encryptedText || !profileA || !profileB) return encryptedText;
+        const key = getDirectKey(profileA, profileB);
+        const bytes = CryptoJS.AES.decrypt(encryptedText, key);
+        const decrypted = bytes.toString(CryptoJS.enc.Utf8);
+        return decrypted || encryptedText;
+    } catch {
         return encryptedText;
     }
 };

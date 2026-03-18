@@ -2,12 +2,15 @@
 import DashboardLayout from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { useUser } from "@clerk/clerk-react";
 import { useEffect, useState } from "react";
-import { getProfileId } from "@/lib/supabase-auth";
+import { getProfileId, getUserProfile, updateUserProfile } from "@/lib/supabase-auth";
 import { useMyCropRequirements, useCreateCropRequirement, useUpdateCropRequirementStatus, useDeleteCropRequirement } from "@/hooks/useCropRequirements";
-import { Loader2, Plus, CheckCircle, Trash2 } from "lucide-react";
+import { Loader2, Plus, CheckCircle, Trash2, Calendar as CalendarIcon } from "lucide-react";
 import { SearchBar } from "@/components/SearchBar";
+import { toast } from "sonner";
 
 export default function MyCropRequirementsPage() {
     const { user } = useUser();
@@ -35,8 +38,37 @@ export default function MyCropRequirementsPage() {
         req.crop_name.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
-    const handleCreate = () => {
+    const handleCreate = async () => {
         if (!profileId || !newCropName || !newQuantity) return;
+
+        try {
+            if (user?.id) {
+                const existing = await getUserProfile(user.id);
+                const clerkPhone = user.phoneNumbers?.[0]?.phoneNumber;
+
+                if (!existing?.phone && clerkPhone) {
+                    await updateUserProfile(user.id, { phone: clerkPhone });
+                }
+
+                const refreshed = await getUserProfile(user.id);
+                if (!refreshed?.phone) {
+                    toast.error("Please add your mobile number in Profile before posting demand.");
+                    return;
+                }
+            }
+        } catch {
+            toast.error("Please add your mobile number in Profile before posting demand.");
+            return;
+        }
+
+        if (user?.id) {
+            const profile = await getUserProfile(user.id);
+            if (!profile?.phone) {
+                toast.error("Please add your mobile number in Profile before posting demand.");
+                return;
+            }
+        }
+
         createReq.mutate({
             hotel_id: profileId,
             crop_name: newCropName,
@@ -58,11 +90,29 @@ export default function MyCropRequirementsPage() {
                 <h2 className="text-2xl font-display font-semibold">My Crop Demands</h2>
                 <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
                     <SearchBar placeholder="Search your demands..." onSearch={setSearchQuery} />
-                    <Button onClick={() => setIsCreating(true)} disabled={isCreating} className="whitespace-nowrap">
+                    <Button onClick={async () => {
+                        if (user?.id) {
+                            const existing = await getUserProfile(user.id);
+                            const clerkPhone = user.phoneNumbers?.[0]?.phoneNumber;
+
+                            if (!existing?.phone && clerkPhone) {
+                                await updateUserProfile(user.id, { phone: clerkPhone });
+                            }
+
+                            const refreshed = await getUserProfile(user.id);
+                            if (!refreshed?.phone) {
+                                toast.error("Please add your mobile number in Profile before posting demand.");
+                                return;
+                            }
+                        }
+                        setIsCreating(true);
+                    }} disabled={isCreating} className="whitespace-nowrap">
                         <Plus className="mr-2 h-4 w-4" /> Post New Demand
                     </Button>
                 </div>
             </div>
+
+            <p className="text-sm text-muted-foreground mb-4">Mobile number is required in your profile before posting a demand.</p>
 
             {isCreating && (
                 <div className="bg-card border border-border rounded-xl p-6 mb-8 space-y-4">
@@ -78,7 +128,31 @@ export default function MyCropRequirementsPage() {
                         </div>
                         <div>
                             <label className="text-sm font-medium">Required By Date</label>
-                            <Input type="date" value={newDate} onChange={e => setNewDate(e.target.value)} />
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <Button variant="outline" className="w-full justify-start text-left font-normal">
+                                  <CalendarIcon className="mr-2 h-4 w-4" />
+                                  {newDate ? new Date(newDate).toLocaleDateString() : "Pick a date"}
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-auto p-0" align="start">
+                                <Calendar
+                                  mode="single"
+                                  selected={newDate ? new Date(newDate) : undefined}
+                                  onSelect={(date) => {
+                                    if (date) {
+                                      const isoDate = date.toISOString().split('T')[0];
+                                      setNewDate(isoDate);
+                                    }
+                                  }}
+                                  disabled={(date) => {
+                                    const today = new Date();
+                                    today.setHours(0, 0, 0, 0);
+                                    return date < today;
+                                  }}
+                                />
+                              </PopoverContent>
+                            </Popover>
                         </div>
                     </div>
                     <div className="flex justify-end gap-2 pt-2">
@@ -100,15 +174,15 @@ export default function MyCropRequirementsPage() {
                     {searchQuery ? "No demands match your search." : "You haven't posted any crop demands yet. Post one to let farmers know what you need."}
                 </div>
             ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-6">
                     {filteredRequirements.map(req => (
-                        <div key={req.id} className="bg-card border border-border rounded-xl p-6">
-                            <div className="flex justify-between items-start mb-4">
+                        <div key={req.id} className="bg-card border border-border rounded-xl p-3 md:p-6">
+                            <div className="flex justify-between items-start mb-3 md:mb-4 gap-2">
                                 <div>
-                                    <h3 className="text-lg font-bold">{req.crop_name}</h3>
-                                    <p className="text-2xl font-light text-primary">{req.quantity_kg} kg</p>
+                                    <h3 className="text-sm md:text-lg font-bold">{req.crop_name}</h3>
+                                    <p className="text-base md:text-2xl font-light text-primary">{req.quantity_kg} kg</p>
                                 </div>
-                                <span className={`px-2 py-1 text-xs font-semibold rounded-full ${req.status === 'open' ? 'bg-blue-500/10 text-blue-500' :
+                                <span className={`px-2 py-1 text-[10px] md:text-xs font-semibold rounded-full ${req.status === 'open' ? 'bg-blue-500/10 text-blue-500' :
                                     req.status === 'fulfilled' ? 'bg-green-500/10 text-green-500' :
                                         'bg-red-500/10 text-red-500'
                                     }`}>
@@ -116,7 +190,7 @@ export default function MyCropRequirementsPage() {
                                 </span>
                             </div>
 
-                            <p className="text-sm text-muted-foreground mb-6">
+                            <p className="text-xs md:text-sm text-muted-foreground mb-3 md:mb-6">
                                 Required By: {req.required_by_date ? new Date(req.required_by_date).toLocaleDateString() : 'No date specified'}
                             </p>
 

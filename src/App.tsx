@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { Toaster } from '@/components/ui/toaster';
 import { Toaster as Sonner } from '@/components/ui/sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -8,6 +8,7 @@ import { ClerkProvider, SignedIn, SignedOut, RedirectToSignIn } from '@clerk/cle
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { CLERK_PUBLISHABLE_KEY } from '@/lib/clerk';
 import { Loader2 } from 'lucide-react';
+import { initializeTheme } from '@/lib/theme';
 
 import Index from './pages/Index';
 import SignIn from './pages/SignIn';
@@ -77,71 +78,77 @@ const PageLoader = () => (
   </div>
 );
 
-const App = () => (
-  <ErrorBoundary>
-    <ClerkProvider
-      publishableKey={CLERK_PUBLISHABLE_KEY}
-      routerPush={(to) => window.location.assign(to)}
-      routerReplace={(to) => window.location.replace(to)}
-    >
-      <QueryClientProvider client={queryClient}>
-        <TooltipProvider>
-          <Toaster />
-          <Sonner />
-          <BrowserRouter
-            future={{
-              v7_startTransition: true,
-              v7_relativeSplatPath: true,
-            }}
-          >
-            <Suspense fallback={<PageLoader />}>
-              <Routes>
-                <Route path="/" element={<Index />} />
-                <Route path="/sign-in/*" element={<SignIn />} />
-                <Route path="/sign-up/*" element={<SignUp />} />
-                <Route path="/auth-callback" element={<ProtectedRoute><AuthCallback /></ProtectedRoute>} />
-                <Route path="/select-role" element={<ProtectedRoute><SelectRole /></ProtectedRoute>} />
-                <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
+const App = () => {
+  useEffect(() => {
+    initializeTheme();
+  }, []);
 
-                {/* Dashboard home pages */}
-                <Route path="/farmer-dashboard" element={<ProtectedRoute><FarmerDashboard /></ProtectedRoute>} />
-                <Route path="/hotel-dashboard" element={<ProtectedRoute><HotelRestaurantDashboard /></ProtectedRoute>} />
-                <Route path="/equipment-dashboard" element={<ProtectedRoute><EquipmentOwnerDashboard /></ProtectedRoute>} />
+  return (
+    <ErrorBoundary>
+      <ClerkProvider
+        publishableKey={CLERK_PUBLISHABLE_KEY}
+        routerPush={(to) => window.location.assign(to)}
+        routerReplace={(to) => window.location.replace(to)}
+      >
+        <QueryClientProvider client={queryClient}>
+          <TooltipProvider>
+            <Toaster />
+            <Sonner />
+            <BrowserRouter
+              future={{
+                v7_startTransition: true,
+                v7_relativeSplatPath: true,
+              }}
+            >
+              <Suspense fallback={<PageLoader />}>
+                <Routes>
+                  <Route path="/" element={<Index />} />
+                  <Route path="/sign-in/*" element={<SignIn />} />
+                  <Route path="/sign-up/*" element={<SignUp />} />
+                  <Route path="/auth-callback" element={<ProtectedRoute><AuthCallback /></ProtectedRoute>} />
+                  <Route path="/select-role" element={<ProtectedRoute><SelectRole /></ProtectedRoute>} />
+                  <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
 
-                {/* Farmer sub-pages */}
-                <Route path="/farmer/crop-guidance" element={<ProtectedRoute><CropGuidancePage /></ProtectedRoute>} />
-                <Route path="/farmer/my-listings" element={<ProtectedRoute><MyCropListingsPage /></ProtectedRoute>} />
-                <Route path="/farmer/browse-equipment" element={<ProtectedRoute><BrowseEquipmentPage /></ProtectedRoute>} />
-                <Route path="/farmer/rental-history" element={<ProtectedRoute><RentalHistoryPage /></ProtectedRoute>} />
-                <Route path="/farmer/weather-alerts" element={<ProtectedRoute><WeatherAlertsPage /></ProtectedRoute>} />
-                <Route path="/farmer/groups" element={<ProtectedRoute><FarmerGroupsPage /></ProtectedRoute>} />
-                <Route path="/farmer/groups/:id" element={<ProtectedRoute><FarmerGroupChatPage /></ProtectedRoute>} />
-                <Route path="/farmer/purchase-requests" element={<ProtectedRoute><PurchaseRequestsPage /></ProtectedRoute>} />
-                <Route path="/farmer/hotel-requests" element={<ProtectedRoute><HotelCropRequestsPage /></ProtectedRoute>} />
-                <Route path="/farmer/contracts" element={<ProtectedRoute><MyContractsPage /></ProtectedRoute>} />
-                <Route path="/farmer/nearby" element={<ProtectedRoute><FindNearbyFarmersPage /></ProtectedRoute>} />
+                  {/* Dashboard home pages */}
+                  <Route path="/farmer-dashboard" element={<ProtectedRoute><FarmerDashboard /></ProtectedRoute>} />
+                  <Route path="/hotel-dashboard" element={<ProtectedRoute><HotelRestaurantDashboard /></ProtectedRoute>} />
+                  <Route path="/equipment-dashboard" element={<ProtectedRoute><EquipmentOwnerDashboard /></ProtectedRoute>} />
 
-                {/* Equipment Owner sub-pages */}
-                <Route path="/equipment/my-equipment" element={<ProtectedRoute><MyEquipmentPage /></ProtectedRoute>} />
-                <Route path="/equipment/rental-requests" element={<ProtectedRoute><RentalRequestsPage /></ProtectedRoute>} />
-                <Route path="/equipment/bookings" element={<ProtectedRoute><BookingCalendarPage /></ProtectedRoute>} />
+                  {/* Farmer sub-pages */}
+                  <Route path="/farmer/crop-guidance" element={<ProtectedRoute><CropGuidancePage /></ProtectedRoute>} />
+                  <Route path="/farmer/my-listings" element={<ProtectedRoute><MyCropListingsPage /></ProtectedRoute>} />
+                  <Route path="/farmer/browse-equipment" element={<ProtectedRoute><BrowseEquipmentPage /></ProtectedRoute>} />
+                  <Route path="/farmer/rental-history" element={<ProtectedRoute><RentalHistoryPage /></ProtectedRoute>} />
+                  <Route path="/farmer/weather-alerts" element={<ProtectedRoute><WeatherAlertsPage /></ProtectedRoute>} />
+                  <Route path="/farmer/groups" element={<ProtectedRoute><FarmerGroupsPage /></ProtectedRoute>} />
+                  <Route path="/farmer/groups/:id" element={<ProtectedRoute><FarmerGroupChatPage /></ProtectedRoute>} />
+                  <Route path="/farmer/purchase-requests" element={<ProtectedRoute><PurchaseRequestsPage /></ProtectedRoute>} />
+                  <Route path="/farmer/hotel-requests" element={<ProtectedRoute><HotelCropRequestsPage /></ProtectedRoute>} />
+                  <Route path="/farmer/contracts" element={<ProtectedRoute><MyContractsPage /></ProtectedRoute>} />
+                  <Route path="/farmer/nearby" element={<ProtectedRoute><FindNearbyFarmersPage /></ProtectedRoute>} />
 
-                {/* Hotel/Restaurant sub-pages */}
-                <Route path="/hotel/browse-produce" element={<ProtectedRoute><BrowseProducePage /></ProtectedRoute>} />
-                <Route path="/hotel/purchase-history" element={<ProtectedRoute><PurchaseHistoryPage /></ProtectedRoute>} />
-                <Route path="/hotel/my-requirements" element={<ProtectedRoute><MyCropRequirementsPage /></ProtectedRoute>} />
-                <Route path="/hotel/delivery-tracking" element={<ProtectedRoute><DeliveryTrackingPage /></ProtectedRoute>} />
-                <Route path="/hotel/contracts" element={<ProtectedRoute><SupplyContractsPage /></ProtectedRoute>} />
-                <Route path="/hotel/billing" element={<ProtectedRoute><HotelBillingPage /></ProtectedRoute>} />
+                  {/* Equipment Owner sub-pages */}
+                  <Route path="/equipment/my-equipment" element={<ProtectedRoute><MyEquipmentPage /></ProtectedRoute>} />
+                  <Route path="/equipment/rental-requests" element={<ProtectedRoute><RentalRequestsPage /></ProtectedRoute>} />
+                  <Route path="/equipment/bookings" element={<ProtectedRoute><BookingCalendarPage /></ProtectedRoute>} />
 
-                <Route path="*" element={<NotFound />} />
-              </Routes>
-            </Suspense>
-          </BrowserRouter>
-        </TooltipProvider>
-      </QueryClientProvider>
-    </ClerkProvider>
-  </ErrorBoundary>
-);
+                  {/* Hotel/Restaurant sub-pages */}
+                  <Route path="/hotel/browse-produce" element={<ProtectedRoute><BrowseProducePage /></ProtectedRoute>} />
+                  <Route path="/hotel/purchase-history" element={<ProtectedRoute><PurchaseHistoryPage /></ProtectedRoute>} />
+                  <Route path="/hotel/my-requirements" element={<ProtectedRoute><MyCropRequirementsPage /></ProtectedRoute>} />
+                  <Route path="/hotel/delivery-tracking" element={<ProtectedRoute><DeliveryTrackingPage /></ProtectedRoute>} />
+                  <Route path="/hotel/contracts" element={<ProtectedRoute><SupplyContractsPage /></ProtectedRoute>} />
+                  <Route path="/hotel/billing" element={<ProtectedRoute><HotelBillingPage /></ProtectedRoute>} />
+
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
+              </Suspense>
+            </BrowserRouter>
+          </TooltipProvider>
+        </QueryClientProvider>
+      </ClerkProvider>
+    </ErrorBoundary>
+  );
+};
 
 export default App;
