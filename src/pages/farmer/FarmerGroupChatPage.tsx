@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { useUser } from "@clerk/clerk-react";
 import { getProfileId } from "@/lib/supabase-auth";
-import { encryptMessage, decryptMessage } from "@/lib/crypto";
+import { encryptMessage, decryptMessage, encryptDirectMessage, decryptDirectMessage } from "@/lib/crypto";
 import { useFarmerGroup, useFarmerGroupRequests, useUpdateFarmerGroupRequest, useFarmerGroups, useJoinFarmerGroup, useLeaveFarmerGroup, useUpdateFarmerGroup } from "@/hooks/useFarmerGroups";
 import { removeGroupMember, uploadGroupIcon } from "@/lib/api/farmer-groups";
 import { useGroupMessages, useSendGroupMessage, useDeleteGroupMessage } from "@/hooks/useFarmerGroupMessages";
@@ -187,16 +187,22 @@ const FarmerGroupChatPage = () => {
         if (!text && !selectedImage) return;
 
         if (isDirectMode) {
-            if (!text || !selectedDirectPeerId) return;
+            if (!selectedDirectPeerId) return;
+            const payload = selectedImage ? encodeImageMessage(selectedImage, text) : text;
+            if (!payload) return;
+
             sendDirectMessageMutation.mutate(
                 {
                     senderId: profileId,
                     receiverId: selectedDirectPeerId,
-                    content: text,
+                    content: encryptDirectMessage(payload, profileId, selectedDirectPeerId),
                 },
                 {
                     onSuccess: () => {
                         setNewMessage("");
+                        setSelectedImage(null);
+                        setSelectedImageName("");
+                        if (imageInputRef.current) imageInputRef.current.value = "";
                     },
                     onError: () => toast.error("Failed to send message"),
                 }
@@ -222,7 +228,9 @@ const FarmerGroupChatPage = () => {
 
     // Filter messages by search query
     const filteredMessages = currentMessages.filter((msg: any) => {
-        const decrypted = isDirectMode ? msg.content : decryptMessage(msg.content, id!);
+        const decrypted = isDirectMode
+            ? decryptDirectMessage(msg.content, profileId || "", selectedDirectPeerId || "")
+            : decryptMessage(msg.content, id!);
         const parsedImage = parseImageMessage(decrypted);
         const searchableText = parsedImage
             ? `${parsedImage.caption} image photo pic picture`
@@ -1267,7 +1275,9 @@ const FarmerGroupChatPage = () => {
                     {filteredMessages && filteredMessages.length > 0 ? (
                         filteredMessages.map((msg) => {
                             const isMe = msg.sender_id === profileId;
-                            const decrypted = decryptMessage(msg.content, id!);
+                            const decrypted = isDirectMode
+                                ? decryptDirectMessage(msg.content, profileId || "", selectedDirectPeerId || "")
+                                : decryptMessage(msg.content, id!);
                             const parsedImage = parseImageMessage(decrypted);
                             const senderName = msg.sender?.full_name || "Unknown Farmer";
                             const copyText = parsedImage ? (parsedImage.caption || "[Image]") : decrypted;
@@ -1409,7 +1419,7 @@ const FarmerGroupChatPage = () => {
 
                 {/* Input Area */}
                 <div className="p-2.5 border-t border-black/10 dark:border-zinc-800 bg-[#f0f2f5] dark:bg-zinc-900">
-                    {!isDirectMode && selectedImage && (
+                    {selectedImage && (
                         <div className="mb-2 rounded-xl border border-black/10 dark:border-zinc-700 bg-white dark:bg-zinc-800 p-2.5 flex items-center gap-3">
                             <img src={selectedImage} alt="Selected" className="w-14 h-14 rounded-lg object-cover border border-black/10" />
                             <div className="min-w-0 flex-1">
@@ -1443,7 +1453,6 @@ const FarmerGroupChatPage = () => {
                         />
 
                         <div className="flex items-flex-end gap-2">
-                            {!isDirectMode && (
                             <Button
                                 type="button"
                                 variant="ghost"
@@ -1454,13 +1463,12 @@ const FarmerGroupChatPage = () => {
                             >
                                 <Paperclip className="h-5 w-5" />
                             </Button>
-                            )}
 
                             <div className="flex-1 relative">
                                 <textarea
                                     value={newMessage}
                                     onChange={handleTextareaChange}
-                                    placeholder={!isDirectMode && selectedImage ? "Add a caption (optional)..." : "Type a message..."}
+                                    placeholder={selectedImage ? "Add a caption (optional)..." : "Type a message..."}
                                     className="w-full px-4 py-3 text-sm font-normal leading-relaxed rounded-2xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-500 dark:placeholder:text-zinc-400 resize-none overflow-hidden focus:outline-none focus:ring-2 focus:ring-emerald-500 dark:focus:ring-emerald-500 transition-all min-h-[44px] max-h-[120px]"
                                     rows={1}
                                 />
@@ -1469,7 +1477,10 @@ const FarmerGroupChatPage = () => {
 
                             <Button
                                 type="submit"
-                                disabled={isDirectMode ? (!newMessage.trim() || sendDirectMessageMutation.isPending) : ((!newMessage.trim() && !selectedImage) || sendMessageMutation.isPending)}
+                                disabled={isDirectMode
+                                    ? ((!newMessage.trim() && !selectedImage) || sendDirectMessageMutation.isPending)
+                                    : ((!newMessage.trim() && !selectedImage) || sendMessageMutation.isPending)
+                                }
                                 size="icon"
                                 className="rounded-lg bg-[#00a884] hover:bg-[#019472] text-white flex-shrink-0 h-11 w-11"
                             >
