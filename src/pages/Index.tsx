@@ -466,7 +466,7 @@ const Stats = () => {
     const counts = [c0, c1, c2, c3];
 
     return (
-        <section className="py-20 bg-emerald-700 dark:bg-emerald-900 relative overflow-hidden">
+        <section className="py-20 bg-emerald-700 dark:bg-sky-900/40 relative overflow-hidden">
             {/* Background elements */}
             <div className="absolute inset-0 opacity-10"
                 style={{ backgroundImage: "radial-gradient(circle,white 1px,transparent 1px)", backgroundSize: "40px 40px" }} />
@@ -598,17 +598,17 @@ const CTABanner = () => {
     return (
         <section className="py-16 sm:py-20 bg-background">
             <div ref={ref} className="container mx-auto px-4 sm:px-6">
-                <div className={`relative bg-gradient-to-br from-emerald-700 via-emerald-600 to-teal-600 dark:from-emerald-900 dark:via-emerald-800 dark:to-teal-900 rounded-3xl p-8 sm:p-14 text-center overflow-hidden transition-all duration-700 ${inView ? "opacity-100 scale-100" : "opacity-0 scale-95"}`}>
+                <div className={`relative bg-gradient-to-br from-emerald-700 via-emerald-600 to-teal-600 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 rounded-3xl p-8 sm:p-14 text-center overflow-hidden transition-all duration-700 ${inView ? "opacity-100 scale-100" : "opacity-0 scale-95"}`}>
                     {/* Background accents */}
                     <div className="absolute inset-0 opacity-10" style={{ backgroundImage: "radial-gradient(circle,white 1px,transparent 1px)", backgroundSize: "28px 28px" }} />
                     <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl" />
                     <div className="absolute bottom-0 left-0 w-48 h-48 bg-teal-300/10 rounded-full blur-3xl" />
 
                     <div className="relative">
-                        <div className="inline-flex items-center gap-2 bg-white/20 border border-white/30 text-white text-xs font-bold rounded-full px-3.5 py-1.5 mb-5">
+                        <div className="inline-flex items-center gap-2 bg-teal-400/70 border border-white/30 text-white text-xs font-bold rounded-full px-3.5 py-1.5 mb-5">
                             <Sprout className="w-3 h-3" /> Free to join · No hidden fees
                         </div>
-                        <h2 className="text-2xl sm:text-4xl lg:text-5xl font-bold text-white mb-4 tracking-tight">
+                        <h2 className="text-2xl sm:text-4xl lg:text-5xl font-bold text-white mb-4 tracking-tight ">
                             Ready to Transform<br />Your Farm?
                         </h2>
                         <p className="text-white/80 text-base sm:text-lg max-w-lg mx-auto mb-8">
