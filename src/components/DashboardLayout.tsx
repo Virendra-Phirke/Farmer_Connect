@@ -1,5 +1,5 @@
 import { UserButton, useUser } from "@clerk/clerk-react";
-import { Tractor, Bell, ArrowLeft, Home, Moon, Sun } from "lucide-react";
+import { Tractor, Bell, ArrowLeft, Home, Moon, Sun, ChevronRight } from "lucide-react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useEffect, useState } from "react";
@@ -272,12 +272,49 @@ const DashboardLayout = ({
         <div className="min-h-screen bg-background">
             <nav className="border-b border-border bg-card">
                 <div className="container mx-auto flex items-center justify-between h-16 px-4">
-                    <Link to="/" className="flex items-center gap-2">
-                        <Tractor className="h-7 w-7 text-primary" />
-                        <span className="font-display text-xl font-bold text-foreground">
-                            Farmer's Connect
-                        </span>
-                    </Link>
+                    <div className="flex items-center">
+                        <Link to="/" className="flex items-center gap-2">
+                            <Tractor className="h-7 w-7 text-primary" />
+                            <span className="font-display text-xl font-bold text-foreground">
+                                Farmer's Connect
+                            </span>
+                        </Link>
+
+                        {location.pathname !== '/' && (
+                            <nav className="hidden md:flex items-center ml-3 space-x-1 text-sm text-muted-foreground mt-0.5">
+                                {location.pathname.split('/').filter(Boolean).map((path, index, array) => {
+                                    const isLast = index === array.length - 1;
+                                    
+                                    // Handle proper routing back to dashboards
+                                    let to = `/${array.slice(0, index + 1).join('/')}`;
+                                    if (index === 0) {
+                                        if (path === 'farmer') to = '/farmer-dashboard';
+                                        if (path === 'equipment') to = '/equipment-dashboard';
+                                        if (path === 'hotel') to = '/hotel-dashboard';
+                                    }
+                                    
+                                    let title = path.charAt(0).toUpperCase() + path.slice(1).replace(/-/g, ' ');
+                                    if (title === 'Farmer') title = 'Dashboard';
+                                    if (title === 'Equipment') title = 'Dashboard';
+                                    if (title === 'Hotel') title = 'Dashboard';
+                                    if (title === 'Farmer dashboard' || title === 'Equipment dashboard' || title === 'Hotel dashboard') title = 'Dashboard';
+                                    
+                                    return (
+                                        <div key={path} className="flex items-center space-x-1">
+                                            <ChevronRight className="h-4 w-4 text-muted-foreground/50" />
+                                            {isLast ? (
+                                                <span className="font-medium text-foreground">{title}</span>
+                                            ) : (
+                                                <Link to={to} className="hover:text-foreground transition-colors">
+                                                    {title}
+                                                </Link>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </nav>
+                        )}
+                    </div>
                     <div className="flex items-center gap-4">
                         <Button
                             type="button"
@@ -310,25 +347,17 @@ const DashboardLayout = ({
             </nav>
 
             <main className="container mx-auto px-4 py-8">
-                {!hidePageActions && (
-                    <div className="flex items-center gap-3 mb-6">
-                        {!isDashboardRoot && (
-                            <Button variant="outline" size="sm" onClick={() => navigate(-1)} className="text-muted-foreground">
-                                <ArrowLeft className="h-4 w-4 mr-2" /> Back
-                            </Button>
-                        )}
-                        <Button variant="outline" size="sm" onClick={() => navigate(role ? rolePaths[role] : "/")} className="text-muted-foreground">
-                            <Home className="h-4 w-4 mr-2" /> Home
-                        </Button>
-                    </div>
-                )}
                 {!hideWelcomeSection && (
-                    <>
-                        <h1 className="font-display text-3xl md:text-4xl font-bold text-foreground mb-2">
-                            Welcome, {user?.firstName || "User"}
-                        </h1>
-                        <p className="text-muted-foreground mb-10">{subtitle}</p>
-                    </>
+                    <div className={isDashboardRoot ? "mb-10" : "mb-6"}>
+                        {isDashboardRoot && (
+                            <h1 className="font-display text-3xl md:text-4xl font-bold text-foreground mb-2">
+                                Welcome, {user?.firstName || "User"}
+                            </h1>
+                        )}
+                        <p className={isDashboardRoot ? "text-muted-foreground" : "text-xl font-medium text-foreground"}>
+                            {subtitle}
+                        </p>
+                    </div>
                 )}
                 {children}
             </main>
