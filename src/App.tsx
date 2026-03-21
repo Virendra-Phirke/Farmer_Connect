@@ -15,6 +15,7 @@ import SignIn from './pages/SignIn';
 import SignUp from './pages/SignUp';
 import SelectRole from './pages/SelectRole';
 import AuthCallback from './pages/AuthCallback';
+import SsoCallback from './pages/SsoCallback';
 import NotFound from './pages/NotFound';
 
 // Lazy load larger dashboard / sub-pages
@@ -89,6 +90,10 @@ const App = () => {
         publishableKey={CLERK_PUBLISHABLE_KEY}
         routerPush={(to) => window.location.assign(to)}
         routerReplace={(to) => window.location.replace(to)}
+        signInUrl="/sign-in"
+        signUpUrl="/sign-up"
+        signInFallbackRedirectUrl="/auth-callback"
+        signUpFallbackRedirectUrl="/auth-callback"
       >
         <QueryClientProvider client={queryClient}>
           <TooltipProvider>
@@ -105,6 +110,7 @@ const App = () => {
                   <Route path="/" element={<Index />} />
                   <Route path="/sign-in/*" element={<SignIn />} />
                   <Route path="/sign-up/*" element={<SignUp />} />
+                  <Route path="/sso-callback" element={<SsoCallback />} />
                   <Route path="/auth-callback" element={<ProtectedRoute><AuthCallback /></ProtectedRoute>} />
                   <Route path="/select-role" element={<ProtectedRoute><SelectRole /></ProtectedRoute>} />
                   <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
