@@ -198,7 +198,7 @@ const FarmerGroupsPage = () => {
     );
 
     return (
-        <DashboardLayout subtitle="Connect with farmers in your area through groups.">
+        <DashboardLayout subtitle="">
             <div className="space-y-5">
 
                 {/* ══ HEADER ════════════════════════════════════════════════ */}
@@ -239,7 +239,7 @@ const FarmerGroupsPage = () => {
 
                             <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
                                 <DialogTrigger asChild>
-                                    <button className={`${btnPrimary} opacity-20 border-white/30`}>
+                                    <button className={btnPrimary}>
                                         <Plus size={14} /> Create Group
                                     </button>
                                 </DialogTrigger>

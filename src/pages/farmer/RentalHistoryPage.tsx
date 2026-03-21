@@ -98,7 +98,7 @@ const RentalHistoryPage = () => {
     }
 
     return (
-        <DashboardLayout subtitle="View the history of all the equipment you've requested to rent.">
+        <DashboardLayout subtitle="">
             <div className="space-y-6">
                 <h2 className="text-xl font-bold flex items-center gap-2"><CalendarCheck className="h-6 w-6" /> Rental History</h2>
 

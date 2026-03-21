@@ -156,7 +156,7 @@ const WeatherAlertsPage = () => {
     const detailDesc = getWeatherDescription(detailWeatherCode);
 
     return (
-        <DashboardLayout subtitle="Stay updated with weather alerts for your farming region.">
+        <DashboardLayout subtitle="">
             <div className="space-y-8">
 
                 {/* ── Location Filter ───────────────────────────────────── */}

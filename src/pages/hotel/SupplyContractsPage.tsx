@@ -136,7 +136,7 @@ const SupplyContractsPage = () => {
     }
 
     return (
-        <DashboardLayout subtitle="Review and manage supply contract proposals from farmers.">
+        <DashboardLayout subtitle="">
             <div className="space-y-6">
                 <h2 className="text-xl font-bold flex items-center gap-2"><FileText className="h-6 w-6" /> Supply Contracts</h2>
 

@@ -181,7 +181,7 @@ const ProfilePage = () => {
 
     if (isLoading) {
         return (
-            <DashboardLayout subtitle="Manage your profile">
+            <DashboardLayout subtitle="">
                 <div className="flex justify-center py-20">
                     <Loader2 className="h-10 w-10 animate-spin text-primary" />
                 </div>
@@ -190,7 +190,7 @@ const ProfilePage = () => {
     }
 
     return (
-        <DashboardLayout subtitle="Manage your personal information and location.">
+        <DashboardLayout subtitle="">
             <div className="max-w-3xl mx-auto space-y-8">
                 {/* Personal Info - Appears for all roles */}
                 <section className="bg-card rounded-xl border border-border p-6 space-y-4">

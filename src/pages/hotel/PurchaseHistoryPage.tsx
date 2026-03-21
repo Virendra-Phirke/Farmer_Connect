@@ -99,7 +99,7 @@ const PurchaseHistoryPage = () => {
     }
 
     return (
-        <DashboardLayout subtitle="View the history of all the crops you've requested to buy.">
+        <DashboardLayout subtitle="">
             <div className="space-y-6">
                 <h2 className="text-xl font-bold flex items-center gap-2"><ShoppingCart className="h-6 w-6" /> Purchase History</h2>
 
