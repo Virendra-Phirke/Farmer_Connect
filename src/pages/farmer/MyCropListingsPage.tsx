@@ -13,6 +13,7 @@ import {
     Edit2, Search, Wheat, Scale, IndianRupee,
     FileText, Tag, TrendingUp, Package,
 } from "lucide-react";
+import { PageSkeleton } from "@/components/PageSkeleton";
 
 // ─── Stat Card ────────────────────────────────────────────────────────────────
 function StatCard({ icon, label, value, sub }: {
@@ -266,10 +267,7 @@ const MyCropListingsPage = () => {
 
                 {/* ── Content ── */}
                 {(!profileId || isLoading) ? (
-                    <div className="flex flex-col items-center justify-center py-20 gap-3">
-                        <Loader2 className="w-8 h-8 animate-spin text-green-600 dark:text-green-400" />
-                        <p className="text-[13px] text-slate-400 dark:text-slate-500">Loading your listings…</p>
-                    </div>
+                    <PageSkeleton type="grid" />
                 ) : error ? (
                     <div className="bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/40 rounded-2xl p-10 text-center">
                         <AlertCircle className="w-8 h-8 text-red-500 mx-auto mb-3" />

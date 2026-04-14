@@ -12,6 +12,7 @@ import {
     ChevronRight, Building2, SlidersHorizontal, BadgeCheck,
 } from "lucide-react";
 import { toast } from "sonner";
+import { PageSkeleton } from "@/components/PageSkeleton";
 
 const PAGE_SIZE = 12;
 
@@ -198,14 +199,8 @@ export default function HotelCropRequestsPage() {
                 {/* ── BODY ──────────────────────────────────────────────── */}
 
                 {/* Loading */}
-                {isLoading ? (
-                    <div className="flex flex-col items-center justify-center py-20
-                        rounded-2xl bg-white dark:bg-gray-900
-                        border border-gray-200 dark:border-gray-700 gap-3">
-                        <div className="w-10 h-10 rounded-full border-[3px]
-                            border-gray-200 dark:border-gray-700 border-t-teal-500 animate-spin" />
-                        <p className="text-sm text-gray-400 dark:text-gray-500">Loading requests…</p>
-                    </div>
+                {(!profileId || isLoading) ? (
+                    <PageSkeleton type="grid" />
 
                 /* No requirements */
                 ) : !requirements?.length ? (

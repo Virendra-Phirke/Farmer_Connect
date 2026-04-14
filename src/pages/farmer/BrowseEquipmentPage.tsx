@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useEquipmentListings } from "@/hooks/useEquipmentListings";
 import { useCreateEquipmentBooking } from "@/hooks/useEquipmentBookings";
 import { useUser } from "@clerk/clerk-react";
@@ -16,6 +16,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { differenceInDays, parseISO } from "date-fns";
+import { PageSkeleton } from "@/components/PageSkeleton";
 
 const PAGE_SIZE = 12;
 
@@ -121,6 +122,8 @@ const BrowseEquipmentPage = () => {
     const [endDate, setEndDate]                       = useState("");
     const [notes, setNotes]                           = useState("");
     const [quantity, setQuantity]                     = useState("1");
+    const startDateInputRef                           = useRef<HTMLInputElement | null>(null);
+    const endDateInputRef                             = useRef<HTMLInputElement | null>(null);
 
     useEffect(() => {
         if (user?.id) getProfileId(user.id).then(setProfileId);
@@ -151,6 +154,29 @@ const BrowseEquipmentPage = () => {
         calcDays(s, e) * (parseInt(qty) || 1) * (rate || 0);
 
     const today = new Date().toISOString().split("T")[0];
+
+    const openNativePicker = (ref: React.RefObject<HTMLInputElement>) => {
+        const input = ref.current;
+        if (!input) return;
+        try {
+            if (typeof input.showPicker === "function") input.showPicker();
+            else input.focus();
+        } catch {
+            input.focus();
+        }
+    };
+
+    const openRentalDialog = (item: any) => {
+        setSelectedEquipment(item);
+        setStartDate(today);
+        setEndDate(today);
+        setNotes("");
+        setQuantity("1");
+    };
+
+    const closeRentalDialog = () => {
+        setSelectedEquipment(null);
+    };
 
     /* submit */
     const handleRequest = async () => {
@@ -287,14 +313,8 @@ const BrowseEquipmentPage = () => {
                 {/* ── CONTENT ───────────────────────────────────────────── */}
 
                 {/* Loading */}
-                {isLoading ? (
-                    <div className="flex flex-col items-center justify-center py-20
-                        rounded-2xl bg-white dark:bg-gray-900
-                        border border-gray-200 dark:border-gray-700 gap-3">
-                        <div className="w-10 h-10 rounded-full border-[3px]
-                            border-gray-200 dark:border-gray-700 border-t-teal-500 animate-spin" />
-                        <p className="text-sm text-gray-400 dark:text-gray-500">Loading equipment…</p>
-                    </div>
+                {(!profileId || isLoading) ? (
+                    <PageSkeleton type="grid" />
 
                 /* No equipment at all */
                 ) : !availableEquipment.length ? (
@@ -413,7 +433,7 @@ const BrowseEquipmentPage = () => {
                                             {/* action — pushed to bottom */}
                                             <div className="mt-auto pt-3 border-t border-gray-100 dark:border-gray-800">
                                                 <button
-                                                    onClick={() => setSelectedEquipment(item)}
+                                                    onClick={() => openRentalDialog(item)}
                                                     className="w-full inline-flex items-center justify-center gap-1.5
                                                         py-2 rounded-lg text-xs font-semibold
                                                         bg-teal-600 hover:bg-teal-700 active:bg-teal-800 text-white
@@ -455,7 +475,7 @@ const BrowseEquipmentPage = () => {
             </div>
 
             {/* ══ RENTAL REQUEST DIALOG ══════════════════════════════════════ */}
-            <Dialog open={!!selectedEquipment} onOpenChange={open => !open && setSelectedEquipment(null)}>
+            <Dialog open={!!selectedEquipment} onOpenChange={open => !open && closeRentalDialog()}>
                 <DialogContent className="w-[calc(100vw-24px)] sm:max-w-md max-h-[92vh] overflow-y-auto
                     rounded-xl sm:rounded-2xl p-4 sm:p-6">
                     <DialogHeader className="mb-3">
@@ -487,24 +507,56 @@ const BrowseEquipmentPage = () => {
                         {/* dates side by side on sm+ */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <Field label="Start Date" required>
-                                <Input
-                                    type="date"
-                                    value={startDate}
-                                    min={today}
-                                    onChange={e => setStartDate(e.target.value)}
-                                    className="h-9 text-sm rounded-xl border-gray-200 dark:border-gray-700
-                                        bg-gray-50 dark:bg-gray-800 focus:border-teal-400 focus:ring-teal-400/20"
-                                />
+                                <div className="relative">
+                                    <Input
+                                        ref={startDateInputRef}
+                                        type="date"
+                                        value={startDate}
+                                        min={today}
+                                        onChange={e => setStartDate(e.target.value)}
+                                        onClick={() => openNativePicker(startDateInputRef)}
+                                        onFocus={() => openNativePicker(startDateInputRef)}
+                                        className="h-10 cursor-pointer pr-10 text-sm rounded-xl border-gray-200 dark:border-gray-700
+                                            [color-scheme:light_dark] [appearance:textfield] [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:pointer-events-none
+                                            bg-gray-50 dark:bg-gray-800 focus:border-teal-400 focus:ring-teal-400/20"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => openNativePicker(startDateInputRef)}
+                                        className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1.5
+                                            text-gray-500 dark:text-gray-400 hover:bg-teal-50 dark:hover:bg-teal-950/40
+                                            hover:text-teal-600 dark:hover:text-teal-400 transition-colors"
+                                        aria-label="Open start date calendar"
+                                    >
+                                        <CalendarDays size={14} />
+                                    </button>
+                                </div>
                             </Field>
                             <Field label="End Date" required>
-                                <Input
-                                    type="date"
-                                    value={endDate}
-                                    min={startDate || today}
-                                    onChange={e => setEndDate(e.target.value)}
-                                    className="h-9 text-sm rounded-xl border-gray-200 dark:border-gray-700
-                                        bg-gray-50 dark:bg-gray-800 focus:border-teal-400 focus:ring-teal-400/20"
-                                />
+                                <div className="relative">
+                                    <Input
+                                        ref={endDateInputRef}
+                                        type="date"
+                                        value={endDate}
+                                        min={startDate || today}
+                                        onChange={e => setEndDate(e.target.value)}
+                                        onClick={() => openNativePicker(endDateInputRef)}
+                                        onFocus={() => openNativePicker(endDateInputRef)}
+                                        className="h-10 cursor-pointer pr-10 text-sm rounded-xl border-gray-200 dark:border-gray-700
+                                            [color-scheme:light_dark] [appearance:textfield] [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:pointer-events-none
+                                            bg-gray-50 dark:bg-gray-800 focus:border-teal-400 focus:ring-teal-400/20"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => openNativePicker(endDateInputRef)}
+                                        className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1.5
+                                            text-gray-500 dark:text-gray-400 hover:bg-teal-50 dark:hover:bg-teal-950/40
+                                            hover:text-teal-600 dark:hover:text-teal-400 transition-colors"
+                                        aria-label="Open end date calendar"
+                                    >
+                                        <CalendarDays size={14} />
+                                    </button>
+                                </div>
                             </Field>
                         </div>
 
