@@ -1,16 +1,18 @@
 import { useEffect, useState, useMemo } from "react";
 import { useUser } from "@clerk/clerk-react";
-import { getProfileId } from "@/lib/supabase-auth";
+import { getProfileId, updateUserProfile } from "@/lib/supabase-auth";
 import { useOwnerBookings, useUpdateEquipmentBooking } from "@/hooks/useEquipmentBookings";
 import { getEquipmentPaymentStatus } from "@/lib/api/equipment-bookings";
 import DashboardLayout from "@/components/DashboardLayout";
 import {
-    Loader2, Users, FileText, Search, X,
+    Users, FileText, Search, X,
     Tractor, Calendar, IndianRupee, ChevronRight,
     Receipt, CheckCircle2, Clock, Package,
 } from "lucide-react";
 import { BillReceiptDialog } from "@/components/BillReceiptDialog";
 import { toast } from "sonner";
+import { PageSkeleton } from "@/components/PageSkeleton";
+import { stripPaymentMarkerLines } from "@/lib/payment-markers";
 
 // ─── Status Badge ─────────────────────────────────────────────────────────────
 function StatusBadge({ status }: { status: string }) {
@@ -38,9 +40,9 @@ function StatusBadge({ status }: { status: string }) {
 // ─── Info Row ─────────────────────────────────────────────────────────────────
 function InfoRow({ Icon, children }: { Icon: React.ElementType; children: React.ReactNode }) {
     return (
-        <div className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+        <div className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400 min-w-0">
             <Icon size={11} className="flex-shrink-0 opacity-60" />
-            <span className="truncate">{children}</span>
+            <span className="text-wrap-safe leading-snug">{children}</span>
         </div>
     );
 }
@@ -70,6 +72,7 @@ function BookingCard({ booking, onViewBill }: {
 }) {
     const payStatus = getEquipmentPaymentStatus(booking);
     const isPaid    = payStatus === "paid";
+    const visibleNotes = stripPaymentMarkerLines(booking.notes);
 
     return (
         <div className="group bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800
@@ -90,7 +93,7 @@ function BookingCard({ booking, onViewBill }: {
                             <Tractor size={18} className="text-green-700 dark:text-green-400" />
                         </div>
                         <div className="min-w-0">
-                            <h3 className="text-[14px] font-bold text-slate-900 dark:text-white leading-tight truncate">
+                            <h3 className="text-[14px] font-bold text-slate-900 dark:text-white leading-tight text-wrap-safe">
                                 {booking.equipment?.name || "Equipment"}
                             </h3>
                             <div className="flex items-center gap-1 text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
@@ -120,7 +123,7 @@ function BookingCard({ booking, onViewBill }: {
                         <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5 flex items-center gap-1">
                             <Package size={9} /> Equipment
                         </p>
-                        <p className="text-[13px] font-semibold text-slate-700 dark:text-slate-300 truncate">
+                        <p className="text-[13px] font-semibold text-slate-700 dark:text-slate-300 text-wrap-safe leading-snug">
                             {booking.equipment?.type || booking.equipment?.category || "—"}
                         </p>
                     </div>
@@ -131,7 +134,7 @@ function BookingCard({ booking, onViewBill }: {
                     <InfoRow Icon={Users}>{booking.renter?.full_name || "Renter"}</InfoRow>
                     {booking.renter?.phone    && <InfoRow Icon={Receipt}>{booking.renter.phone}</InfoRow>}
                     {booking.renter?.location && <InfoRow Icon={Calendar}>{booking.renter.location}</InfoRow>}
-                    {booking.notes            && <InfoRow Icon={FileText}>{booking.notes}</InfoRow>}
+                    {visibleNotes             && <InfoRow Icon={FileText}>{visibleNotes}</InfoRow>}
                 </div>
 
                 {/* View bill button */}
@@ -202,6 +205,8 @@ const BookingCalendarPage = () => {
             amount,
             date: new Date(booking.created_at || new Date()).toLocaleDateString(),
             paymentStatus: getEquipmentPaymentStatus(booking),
+            paymentQrUrl: booking.payment_qr_url || booking.equipment?.owner?.payment_qr_url,
+            paymentReceiptUrl: booking.payment_receipt_url,
             paymentConfirmedAt: getEquipmentPaymentStatus(booking) === "paid"
                 ? new Date(booking.updated_at || booking.created_at).toLocaleString() : undefined,
             buyer: { id: booking.renter?.id, name: booking.renter?.full_name || "Renter", phone: booking.renter?.phone, email: booking.renter?.email, address: booking.renter?.location, state: booking.renter?.state, district: booking.renter?.district, taluka: booking.renter?.taluka, village_city: booking.renter?.village_city },
@@ -221,6 +226,31 @@ const BookingCalendarPage = () => {
             setIsBillOpen(false);
             toast.success("Payment marked as complete.");
         } catch { toast.error("Failed to mark payment as complete."); }
+    };
+
+    const handleUploadPaymentQr = async (paymentQrDataUrl: string) => {
+        const isActualSeller = selectedBooking?.originalRecord?.equipment?.owner_id === profileId;
+        if (!selectedBooking?.originalRecord?.id || !isActualSeller) return;
+
+        try {
+            const updated = await updateMutation.mutateAsync({
+                id: selectedBooking.originalRecord.id,
+                updates: { payment_qr_url: paymentQrDataUrl } as any,
+            });
+
+            if (user?.id) {
+                await updateUserProfile(user.id, { payment_qr_url: paymentQrDataUrl } as any);
+            }
+
+            setSelectedBooking((prev: any) => prev ? {
+                ...prev,
+                paymentQrUrl: paymentQrDataUrl,
+                originalRecord: { ...prev.originalRecord, ...(updated || {}), payment_qr_url: paymentQrDataUrl },
+            } : prev);
+            toast.success("Payment QR uploaded.");
+        } catch {
+            toast.error("Failed to upload payment QR.");
+        }
     };
 
     const loading = !profileId || isLoading;
@@ -278,7 +308,7 @@ const BookingCalendarPage = () => {
                                 className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 px-5 py-4 flex items-center gap-4 shadow-sm">
                                 <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${s.dot}`} />
                                 <div className="min-w-0">
-                                    <p className="text-[20px] sm:text-[24px] font-bold text-slate-900 dark:text-white leading-none truncate">{s.val}</p>
+                                    <p className="text-[20px] sm:text-[24px] font-bold text-slate-900 dark:text-white leading-none break-all">{s.val}</p>
                                     <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 mt-0.5">{s.label}</p>
                                 </div>
                             </div>
@@ -288,11 +318,7 @@ const BookingCalendarPage = () => {
 
                 {/* ── Content ── */}
                 {loading ? (
-                    <div className="flex flex-col items-center justify-center py-20 gap-3
-                        bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800">
-                        <div className="w-9 h-9 rounded-full border-[3px] border-slate-200 dark:border-slate-700 border-t-green-500 animate-spin" />
-                        <p className="text-[12px] text-slate-400 dark:text-slate-500">Loading bookings…</p>
-                    </div>
+                    <PageSkeleton type="list" />
                 ) : !confirmedBookings.length ? (
                     <EmptyState icon={Tractor} title="No Confirmed Bookings"
                         subtitle="Confirmed and completed equipment rental bookings will appear here." />
@@ -318,6 +344,9 @@ const BookingCalendarPage = () => {
                 billDetails={selectedBooking}
                 canMarkPaid={selectedBooking?.originalRecord?.equipment?.owner_id === profileId}
                 onMarkPaid={handleMarkPaid}
+                canUploadPaymentQr={selectedBooking?.originalRecord?.equipment?.owner_id === profileId}
+                onUploadPaymentQr={handleUploadPaymentQr}
+                isUploadingPaymentQr={updateMutation.isPending}
                 isLoading={updateMutation.isPending}
             />
         </DashboardLayout>

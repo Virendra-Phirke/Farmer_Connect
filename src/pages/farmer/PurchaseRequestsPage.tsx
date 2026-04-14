@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useUser } from "@clerk/clerk-react";
-import { getProfileId } from "@/lib/supabase-auth";
+import { useLocation, useNavigate } from "react-router-dom";
+import { getProfileId, updateUserProfile } from "@/lib/supabase-auth";
 import { useFarmerPurchaseRequests, useUpdatePurchaseRequest } from "@/hooks/usePurchaseRequests";
 import DashboardLayout from "@/components/DashboardLayout";
 import {
@@ -12,6 +13,7 @@ import {
 import { toast } from "sonner";
 import BillReceiptDialog from "@/components/BillReceiptDialog";
 import { PageSkeleton } from "@/components/PageSkeleton";
+import { stripPaymentMarkerLines } from "@/lib/payment-markers";
 
 // ─── Status Badge ─────────────────────────────────────────────────────────────
 const STATUS_STYLES: Record<string, string> = {
@@ -71,6 +73,7 @@ function PendingCard({ req, onAccept, onReject, isLoading }: {
     const qty      = Number(req.quantity_kg || 0);
     const price    = Number(req.offered_price || 0);
     const total    = qty * price;
+    const visibleMessage = stripPaymentMarkerLines(req.message);
     return (
         <div className="group bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800
             overflow-hidden hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200">
@@ -116,7 +119,7 @@ function PendingCard({ req, onAccept, onReject, isLoading }: {
                     <InfoRow Icon={User}>{req.buyer?.full_name || "Buyer"}</InfoRow>
                     {req.buyer?.phone   && <InfoRow Icon={Phone}>{req.buyer.phone}</InfoRow>}
                     {req.buyer?.location && <InfoRow Icon={MapPin}>{req.buyer.location}</InfoRow>}
-                    {req.message && <InfoRow Icon={MessageSquare}>{req.message}</InfoRow>}
+                    {visibleMessage && <InfoRow Icon={MessageSquare}>{visibleMessage}</InfoRow>}
                 </div>
 
                 {/* Actions */}
@@ -231,6 +234,8 @@ type Tab = "pending" | "history";
 
 const PurchaseRequestsPage = () => {
     const { user } = useUser();
+    const location = useLocation();
+    const navigate = useNavigate();
     const [profileId,    setProfileId]    = useState<string | null>(null);
     const [activeTab,    setActiveTab]    = useState<Tab>("pending");
     const [searchQuery,  setSearchQuery]  = useState("");
@@ -286,6 +291,31 @@ const PurchaseRequestsPage = () => {
         }
     };
 
+    const handleUploadPaymentQr = async (paymentQrDataUrl: string) => {
+        const isActualSeller = selectedBill?.originalRecord?.crop_listing?.farmer_id === profileId;
+        if (!selectedBill?.originalRecord?.id || !isActualSeller) return;
+
+        try {
+            const updated = await updateMutation.mutateAsync({
+                id: selectedBill.originalRecord.id,
+                updates: { payment_qr_url: paymentQrDataUrl } as any,
+            });
+
+            if (user?.id) {
+                await updateUserProfile(user.id, { payment_qr_url: paymentQrDataUrl } as any);
+            }
+
+            setSelectedBill((prev: any) => prev ? {
+                ...prev,
+                paymentQrUrl: paymentQrDataUrl,
+                originalRecord: { ...prev.originalRecord, ...(updated || {}), payment_qr_url: paymentQrDataUrl },
+            } : prev);
+            toast.success("Payment QR uploaded.");
+        } catch {
+            toast.error("Failed to upload payment QR.");
+        }
+    };
+
     const showBill = (req: any, paymentStatusOverride?: string, billingIdOverride?: string) => {
         const crop   = req.crop_listing?.crop_name || "Crop";
         const qty    = Number(req.quantity_kg || 0);
@@ -301,6 +331,8 @@ const PurchaseRequestsPage = () => {
             date: new Date(req.created_at || new Date()).toLocaleDateString(),
             paymentConfirmedAt: req.payment_status === "paid" ? new Date(req.updated_at || req.created_at).toLocaleString() : undefined,
             amount: total, paymentStatus: paymentStatusOverride || req.payment_status || "unpaid",
+            paymentQrUrl: req.payment_qr_url || req.crop_listing?.farmer?.payment_qr_url,
+            paymentReceiptUrl: req.payment_receipt_url,
             status: req.status || "accepted", buyerName: req.buyer?.full_name || "Buyer",
             buyer:  { id: req.buyer?.id, name: req.buyer?.full_name || "Buyer", phone: req.buyer?.phone, email: req.buyer?.email, address: req.buyer?.location, state: req.buyer?.state, district: req.buyer?.district, taluka: req.buyer?.taluka, village_city: req.buyer?.village_city },
             seller: { id: farmer?.id || profileId, name: farmer?.full_name || user?.fullName || "Seller", phone: farmer?.phone || user?.phoneNumbers?.[0]?.phoneNumber, email: farmer?.email || user?.primaryEmailAddress?.emailAddress, address: farmer?.location, state: farmer?.state, district: farmer?.district, taluka: farmer?.taluka, village_city: farmer?.village_city },
@@ -312,6 +344,20 @@ const PurchaseRequestsPage = () => {
         });
         setIsBillOpen(true);
     };
+
+    useEffect(() => {
+        const navState = (location.state || {}) as { openBillId?: string; openBillSource?: string };
+        if (navState.openBillSource !== "purchase" || !navState.openBillId || !requests?.length) return;
+
+        const target = requests.find((req: any) => req.id === navState.openBillId);
+        if (!target) return;
+
+        if (target.status !== "pending") {
+            setActiveTab("history");
+        }
+        showBill(target);
+        navigate(location.pathname, { replace: true, state: null });
+    }, [location.pathname, location.state, navigate, requests]);
 
     const loading = !profileId || isLoading;
 
@@ -471,6 +517,9 @@ const PurchaseRequestsPage = () => {
                 billData={selectedBill}
                 canMarkPaid={selectedBill?.originalRecord?.crop_listing?.farmer_id === profileId}
                 onMarkPaid={handleMarkPaid}
+                canUploadPaymentQr={selectedBill?.originalRecord?.crop_listing?.farmer_id === profileId}
+                onUploadPaymentQr={handleUploadPaymentQr}
+                isUploadingPaymentQr={updateMutation.isPending}
                 isLoading={updateMutation.isPending}
             />
         </DashboardLayout>

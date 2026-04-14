@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
 import { useUser } from "@clerk/clerk-react";
 import { getProfileId } from "@/lib/supabase-auth";
-import { usePurchaseRequests } from "@/hooks/usePurchaseRequests";
+import { usePurchaseRequests, useUpdatePurchaseRequest } from "@/hooks/usePurchaseRequests";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Loader2, ShoppingCart, Check, X, Clock, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SearchBar } from "@/components/SearchBar";
 import { BillReceiptDialog } from "@/components/BillReceiptDialog";
 import { PageSkeleton } from "@/components/PageSkeleton";
+import { toast } from "sonner";
+import { stripPaymentMarkerLines } from "@/lib/payment-markers";
 
 const PurchaseHistoryPage = () => {
     const { user } = useUser();
@@ -15,6 +17,7 @@ const PurchaseHistoryPage = () => {
     const [isBillOpen, setIsBillOpen] = useState(false);
     const [selectedRequest, setSelectedRequest] = useState<any>(null);
     const [searchQuery, setSearchQuery] = useState("");
+    const updateMutation = useUpdatePurchaseRequest();
 
     const showBill = (req: any) => {
         const cropName = req.crop_listing?.crop_name || "Crop";
@@ -33,6 +36,8 @@ const PurchaseHistoryPage = () => {
             date: new Date(req.created_at || new Date()).toLocaleDateString(),
             amount: computedAmount,
             paymentStatus: req.payment_status || "unpaid",
+            paymentQrUrl: req.payment_qr_url || req.crop_listing?.farmer?.payment_qr_url,
+            paymentReceiptUrl: req.payment_receipt_url,
             paymentConfirmedAt: req.payment_status === "paid" ? new Date(req.updated_at || req.created_at).toLocaleString() : undefined,
             status: req.status || "accepted",
             buyer: {
@@ -72,6 +77,26 @@ const PurchaseHistoryPage = () => {
             originalRecord: req
         });
         setIsBillOpen(true);
+    };
+
+    const handleUploadPaymentReceipt = async (paymentReceiptDataUrl: string) => {
+        if (!selectedRequest?.originalRecord?.id) return;
+        try {
+            const updated = await updateMutation.mutateAsync({
+                id: selectedRequest.originalRecord.id,
+                updates: { payment_receipt_url: paymentReceiptDataUrl } as any,
+            });
+
+            setSelectedRequest((prev: any) => prev ? {
+                ...prev,
+                paymentReceiptUrl: paymentReceiptDataUrl,
+                originalRecord: { ...prev.originalRecord, ...(updated || {}), payment_receipt_url: paymentReceiptDataUrl },
+            } : prev);
+
+            toast.success("Payment receipt uploaded. Seller has been notified to verify and confirm payment.");
+        } catch {
+            toast.error("Failed to upload payment receipt.");
+        }
     };
 
     useEffect(() => {
@@ -134,7 +159,7 @@ const PurchaseHistoryPage = () => {
                                     </div>
                                     <p className="font-medium mt-1">Requested Qty: {req.quantity_kg} kg @ ₹{req.offered_price}/kg</p>
                                     <p className="text-sm mt-1">Total Amount: <span className="font-semibold text-foreground">₹{Number(req.total_amount ?? (Number(req.quantity_kg || 0) * Number(req.offered_price || 0)))}</span></p>
-                                    {req.message && <p className="text-sm mt-1 text-muted-foreground">Note: {req.message}</p>}
+                                    {stripPaymentMarkerLines(req.message) && <p className="text-sm mt-1 text-muted-foreground">Note: {stripPaymentMarkerLines(req.message)}</p>}
                                 </div>
                                 <div className="flex flex-col items-end gap-2">
                                     <div className="flex items-center gap-2">
@@ -157,6 +182,9 @@ const PurchaseHistoryPage = () => {
                 onClose={() => setIsBillOpen(false)}
                 billDetails={selectedRequest}
                 canMarkPaid={false} // Buyer can't mark it paid, seller marks paid
+                canUploadPaymentReceipt={true}
+                onUploadPaymentReceipt={handleUploadPaymentReceipt}
+                isUploadingPaymentReceipt={updateMutation.isPending}
             />
         </DashboardLayout>
     );

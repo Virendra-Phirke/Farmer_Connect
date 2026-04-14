@@ -69,6 +69,8 @@ const SupplyContractsPage = () => {
             date: new Date(contract.start_date || contract.created_at).toLocaleDateString(),
             amount: computedAmount,
             paymentStatus: contract.payment_status || "unpaid",
+            paymentQrUrl: contract.payment_qr_url || contract.farmer?.payment_qr_url,
+            paymentReceiptUrl: contract.payment_receipt_url,
             paymentConfirmedAt: contract.payment_status === "paid" ? new Date(contract.updated_at || contract.created_at).toLocaleString() : undefined,
             status: contract.status || "pending",
             buyer: {
@@ -124,6 +126,26 @@ const SupplyContractsPage = () => {
         updateMutation.mutate({ id, updates: { status: "cancelled" } }, {
             onSuccess: () => toast.success("Supply contract proposal rejected.")
         });
+    };
+
+    const handleUploadPaymentReceipt = async (paymentReceiptDataUrl: string) => {
+        if (!selectedContract?.originalRecord?.id) return;
+        try {
+            const updated = await updateMutation.mutateAsync({
+                id: selectedContract.originalRecord.id,
+                updates: { payment_receipt_url: paymentReceiptDataUrl } as any,
+            });
+
+            setSelectedContract((prev: any) => prev ? {
+                ...prev,
+                paymentReceiptUrl: paymentReceiptDataUrl,
+                originalRecord: { ...prev.originalRecord, ...(updated || {}), payment_receipt_url: paymentReceiptDataUrl },
+            } : prev);
+
+            toast.success("Payment receipt uploaded. Seller has been notified to verify and confirm payment.");
+        } catch {
+            toast.error("Failed to upload payment receipt.");
+        }
     };
 
     const getStatusBadge = (status: string) => {
@@ -225,6 +247,9 @@ const SupplyContractsPage = () => {
                 onClose={() => setIsBillOpen(false)}
                 billDetails={selectedContract}
                 canMarkPaid={false}
+                canUploadPaymentReceipt={true}
+                onUploadPaymentReceipt={handleUploadPaymentReceipt}
+                isUploadingPaymentReceipt={updateMutation.isPending}
             />
         </DashboardLayout>
     );

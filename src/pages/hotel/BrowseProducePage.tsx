@@ -284,10 +284,10 @@ const BrowseProducePage = () => {
                                                     <Wheat size={16} />
                                                 </div>
                                                 <div className="flex-1 min-w-0">
-                                                    <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100 leading-tight truncate">
+                                                    <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100 leading-tight text-wrap-safe">
                                                         {item.crop_name}
                                                     </h3>
-                                                    <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5 flex items-center gap-1 truncate">
+                                                    <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5 flex items-center gap-1 text-wrap-safe leading-snug">
                                                         <User size={9} className="flex-shrink-0" />
                                                         {item.farmer?.full_name || "Unknown Farmer"}
                                                     </p>
@@ -404,10 +404,10 @@ const BrowseProducePage = () => {
                                 <ShoppingCart size={14} />
                             </div>
                             <div className="min-w-0">
-                                <h2 className="text-sm font-bold text-white leading-tight truncate">
+                                <h2 className="text-sm font-bold text-white leading-tight text-wrap-safe">
                                     Request: {selectedCrop?.crop_name}
                                 </h2>
-                                <p className="text-teal-100/70 text-xs mt-0.5 truncate">
+                                <p className="text-teal-100/70 text-xs mt-0.5 text-wrap-safe">
                                     from {selectedCrop?.farmer?.full_name || "Unknown Farmer"}
                                 </p>
                             </div>

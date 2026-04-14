@@ -1,14 +1,12 @@
-import React, { useMemo, useRef } from "react";
-import { useReactToPrint } from "react-to-print";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Printer, CheckCircle, FileText, Download, Leaf, MapPin, Phone, Mail } from "lucide-react";
-import { jsPDF } from "jspdf";
-import autoTable from "jspdf-autotable";
-import html2canvas from "html2canvas";
 
 type PaymentStatus = "unpaid" | "paid";
+const PAYMENT_QR_MARKER = "[payment_qr_url]";
+const PAYMENT_RECEIPT_MARKER = "[payment_receipt_url]";
 
 export interface BillParty {
   name: string;
@@ -44,6 +42,8 @@ export interface BillData {
   dueDate?: string;
   paymentStatus: PaymentStatus;
   paymentMethod?: string;
+  paymentQrUrl?: string;
+  paymentReceiptUrl?: string;
   paymentConfirmedAt?: string;
   buyer: BillParty;
   seller: BillParty;
@@ -57,6 +57,12 @@ export interface BillData {
   partyRole?: string;
   status: string;
   onMarkPaid?: () => void;
+  onUploadPaymentQr?: (paymentQrDataUrl: string) => void | Promise<void>;
+  onUploadPaymentReceipt?: (paymentReceiptDataUrl: string) => void | Promise<void>;
+  isUploadingPaymentQr?: boolean;
+  isUploadingPaymentReceipt?: boolean;
+  canUploadPaymentQr?: boolean;
+  canUploadPaymentReceipt?: boolean;
   isLoading?: boolean;
 }
 
@@ -69,6 +75,12 @@ interface BillReceiptDialogProps {
   billData?: RawBillInput | null;
   billDetails?: RawBillInput | null;
   onMarkPaid?: () => void;
+  onUploadPaymentQr?: (paymentQrDataUrl: string) => void | Promise<void>;
+  onUploadPaymentReceipt?: (paymentReceiptDataUrl: string) => void | Promise<void>;
+  isUploadingPaymentQr?: boolean;
+  isUploadingPaymentReceipt?: boolean;
+  canUploadPaymentQr?: boolean;
+  canUploadPaymentReceipt?: boolean;
   isLoading?: boolean;
   canMarkPaid?: boolean;
 }
@@ -90,7 +102,35 @@ const asNumber = (value: unknown, fallback = 0) => { const n = Number(value); re
 const asRecord = (value: unknown): Record<string, unknown> => typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
 const asNonEmptyString = (value: unknown): string | undefined => { if (value === null || value === undefined) return undefined; const v = String(value).trim(); return v.length ? v : undefined; };
 const deriveIdToken = (value: unknown): string => { const source = String(value ?? "").trim(); if (!source) return "00000000"; const first = source.split("-")[0] || source; const cleaned = first.replace(/[^A-Za-z0-9]/g, "").toUpperCase(); return (cleaned || source.replace(/[^A-Za-z0-9]/g, "").toUpperCase()).slice(0, 8).padEnd(8, "0"); };
+const sanitizeFileToken = (value: string, fallback: string): string => {
+  const token = String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return token || fallback;
+};
 const hasPartyData = (value: Record<string, unknown>) => !!(value.full_name || value.name || value.email || value.phone || value.location || value.address);
+const parsePaymentQrFromNotes = (value: unknown): string | undefined => {
+  const notes = String(value ?? "");
+  if (!notes.includes(PAYMENT_QR_MARKER)) return undefined;
+  const line = notes
+    .split("\n")
+    .map((l) => l.trim())
+    .find((l) => l.startsWith(PAYMENT_QR_MARKER));
+  const parsed = line?.replace(PAYMENT_QR_MARKER, "").trim();
+  return parsed || undefined;
+};
+
+const parsePaymentReceiptFromNotes = (value: unknown): string | undefined => {
+  const notes = String(value ?? "");
+  if (!notes.includes(PAYMENT_RECEIPT_MARKER)) return undefined;
+  const line = notes
+    .split("\n")
+    .map((l) => l.trim())
+    .find((l) => l.startsWith(PAYMENT_RECEIPT_MARKER));
+  const parsed = line?.replace(PAYMENT_RECEIPT_MARKER, "").trim();
+  return parsed || undefined;
+};
 
 const normalizeBillData = (raw: RawBillInput | BillData | null | undefined): BillData | null => {
   if (!raw) return null;
@@ -101,6 +141,24 @@ const normalizeBillData = (raw: RawBillInput | BillData | null | undefined): Bil
   const rawStatus = raw.status ?? originalRecord.status ?? "active";
   const status = ["paid", "unpaid"].includes(String(rawStatus).toLowerCase()) ? (originalRecord.status ?? "active") : rawStatus;
   const amount = asNumber(raw.amount ?? rawObj.total_amount ?? rawObj.totalPrice ?? 0, 0);
+  const paymentQrUrl =
+    asNonEmptyString(raw.paymentQrUrl) ??
+    asNonEmptyString(rawObj.payment_qr_url) ??
+    asNonEmptyString(originalRecord.payment_qr_url) ??
+    parsePaymentQrFromNotes(raw.notes) ??
+    parsePaymentQrFromNotes(rawObj.notes) ??
+    parsePaymentQrFromNotes(originalRecord.notes) ??
+    parsePaymentQrFromNotes(rawObj.message) ??
+    parsePaymentQrFromNotes(originalRecord.message);
+  const paymentReceiptUrl =
+    asNonEmptyString((raw as any).paymentReceiptUrl) ??
+    asNonEmptyString(rawObj.payment_receipt_url) ??
+    asNonEmptyString(originalRecord.payment_receipt_url) ??
+    parsePaymentReceiptFromNotes(raw.notes) ??
+    parsePaymentReceiptFromNotes(rawObj.notes) ??
+    parsePaymentReceiptFromNotes(originalRecord.notes) ??
+    parsePaymentReceiptFromNotes(rawObj.message) ??
+    parsePaymentReceiptFromNotes(originalRecord.message);
   const quantity = asNumber(rawObj.quantity ?? rawObj.quantity_kg ?? originalRecord.quantity_kg ?? 1, 1);
   const unitPrice = asNumber(rawObj.unitPrice ?? rawObj.offered_price ?? originalRecord.offered_price, quantity ? amount / quantity : amount);
   const subtotal = asNumber(raw.subtotal ?? amount, amount);
@@ -147,11 +205,19 @@ const normalizeBillData = (raw: RawBillInput | BillData | null | undefined): Bil
     date: raw.date ?? new Date().toLocaleDateString("en-GB"),
     dueDate: raw.dueDate, paymentStatus,
     paymentMethod: raw.paymentMethod ?? "Cash / Bank Transfer",
+    paymentQrUrl,
+    paymentReceiptUrl,
     paymentConfirmedAt: raw.paymentConfirmedAt,
     buyer, seller, lineItems, subtotal, taxRate, taxAmount, total,
     notes: raw.notes, partyName: raw.partyName ?? (rawObj.buyerName ? String(rawObj.buyerName) : rawObj.sellerName ? String(rawObj.sellerName) : undefined),
     partyRole: raw.partyRole, status: String(status),
     onMarkPaid: raw.onMarkPaid, isLoading: raw.isLoading,
+    onUploadPaymentQr: raw.onUploadPaymentQr,
+    onUploadPaymentReceipt: (raw as any).onUploadPaymentReceipt,
+    isUploadingPaymentQr: raw.isUploadingPaymentQr,
+    isUploadingPaymentReceipt: (raw as any).isUploadingPaymentReceipt,
+    canUploadPaymentQr: raw.canUploadPaymentQr,
+    canUploadPaymentReceipt: (raw as any).canUploadPaymentReceipt,
   };
 };
 
@@ -166,7 +232,12 @@ const partyAddressLine = (p: BillParty): string => {
 };
 
 // ── PDF builder (unchanged — PDFs are always light) ───────────────────────────
-const buildPdf = (d: BillData) => {
+const buildPdf = async (d: BillData) => {
+  const [{ jsPDF }, { default: autoTable }] = await Promise.all([
+    import("jspdf"),
+    import("jspdf-autotable"),
+  ]);
+
   const doc = new jsPDF({ unit: "pt", format: "a4" });
   const PW = doc.internal.pageSize.getWidth(), PH = doc.internal.pageSize.getHeight();
   const ML = 48, MR = PW - 48;
@@ -204,7 +275,7 @@ const buildPdf = (d: BillData) => {
   const txColW = (PW - ML * 2) / txItems.length;
   txItems.forEach((t, i) => { const cx = ML + i * txColW + txColW / 2; doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(...GREY_MID); doc.text(t.label.toUpperCase(), cx, y + 11, { align: "center" }); doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.setTextColor(...GREY_DARK); doc.text(t.value, cx, y + 25, { align: "center" }); });
   y += 46;
-  type JsPdfWithAutoTable = jsPDF & { lastAutoTable?: { finalY?: number } };
+  type JsPdfWithAutoTable = { lastAutoTable?: { finalY?: number } };
   autoTable(doc, { startY: y, margin: { left: ML, right: 48 }, head: [["Description", "Qty", "Unit Price", "Amount"]], body: d.lineItems.map(item => [item.description, String(item.quantity), formatCurrencyPdf(item.unitPrice, d.currency), formatCurrencyPdf(item.amount, d.currency)]), theme: "grid", headStyles: { fillColor: GREEN_DARK, textColor: WHITE, fontSize: 9, fontStyle: "bold", halign: "left", cellPadding: 8 }, columnStyles: { 0: { halign: "left", cellWidth: "auto" }, 1: { halign: "right", cellWidth: 50 }, 2: { halign: "right", cellWidth: 90 }, 3: { halign: "right", cellWidth: 90, fontStyle: "bold" } }, bodyStyles: { fontSize: 9, cellPadding: 7, textColor: GREY_DARK }, alternateRowStyles: { fillColor: [252, 253, 252] }, styles: { lineColor: [220, 220, 220], lineWidth: 0.3 } });
   const tableEndY = (doc as JsPdfWithAutoTable).lastAutoTable?.finalY ?? y + 80;
   let ty = tableEndY + 16; const totalsX = MR - 200;
@@ -216,12 +287,16 @@ const buildPdf = (d: BillData) => {
   drawTotalRow("Subtotal", formatCurrencyPdf(d.subtotal, d.currency), false, false, ty + 16); drawTotalRow(`Tax (${d.taxRate}%)`, formatCurrencyPdf(d.taxAmount, d.currency), false, false, ty + 34); drawTotalRow("GRAND TOTAL", formatCurrencyPdf(d.total, d.currency), true, true, ty + 56);
   ty += 92;
   if (d.paymentStatus === "paid") { doc.setFillColor(220, 252, 231); doc.setDrawColor(...GREEN_MID); doc.roundedRect(ML, ty, PW - ML * 2, 26, 4, 4, "FD"); doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.setTextColor(...GREEN_DARK); doc.text("PAYMENT CONFIRMED", ML + 10, ty + 11); if (d.paymentConfirmedAt) { doc.setFont("helvetica", "normal"); doc.setTextColor(...GREY_MID); doc.text(`Confirmed at: ${d.paymentConfirmedAt}`, ML + 10, ty + 21); } ty += 36; }
-  if (d.notes) { doc.setFillColor(255, 251, 235); doc.setDrawColor(253, 224, 71); doc.roundedRect(ML, ty, PW - ML * 2, 30, 4, 4, "FD"); doc.setFont("helvetica", "bold"); doc.setFontSize(8.5); doc.setTextColor(120, 80, 0); doc.text("Note:", ML + 10, ty + 12); doc.setFont("helvetica", "normal"); doc.setTextColor(GREY_DARK[0], GREY_DARK[1], GREY_DARK[2]); doc.text(d.notes, ML + 34, ty + 12); }
   doc.setFillColor(...GREEN_DARK); doc.rect(0, PH - 36, PW, 36, "F"); doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); doc.setTextColor(187, 247, 208); doc.text("Thank you for using FarmDirect Connect — Connecting Farmers to Markets.", PW / 2, PH - 20, { align: "center" }); doc.setTextColor(134, 239, 172); doc.text("This is a system-generated document. No signature required.", PW / 2, PH - 10, { align: "center" });
   return doc;
 };
 
 const buildPdfFromElement = async (element: HTMLElement) => {
+  const [{ jsPDF }, { default: html2canvas }] = await Promise.all([
+    import("jspdf"),
+    import("html2canvas"),
+  ]);
+
   const canvas = await html2canvas(element, { scale: 2, useCORS: true, backgroundColor: "#ffffff", logging: false, windowWidth: element.scrollWidth });
   const imgData = canvas.toDataURL("image/png");
   const pdf = new jsPDF({ unit: "pt", format: "a4" });
@@ -247,13 +322,13 @@ const PartyCard = ({ party, label }: { party: BillParty; label: string }) => {
       <div className="p-4 space-y-3">
         <div>
           <p className="text-[9px] font-bold tracking-widest text-green-700 dark:text-green-500 uppercase mb-0.5">Name</p>
-          <p className="font-bold text-slate-900 dark:text-white text-[15px]">{party.name}</p>
+          <p className="font-bold text-slate-900 dark:text-white text-[15px] break-words">{party.name}</p>
         </div>
         <div>
           <p className="text-[9px] font-bold tracking-widest text-green-700 dark:text-green-500 uppercase mb-0.5">Address</p>
-          <div className="flex items-start gap-2 text-[12px] text-slate-600 dark:text-slate-300">
+          <div className="flex items-start gap-2 text-[12px] text-slate-600 dark:text-slate-300 min-w-0">
             <MapPin className="h-3.5 w-3.5 mt-0.5 shrink-0 text-green-600 dark:text-green-500" />
-            <span>{addressLine}</span>
+            <span className="text-wrap-safe">{addressLine}</span>
           </div>
         </div>
         <div>
@@ -279,48 +354,204 @@ const PartyCard = ({ party, label }: { party: BillParty; label: string }) => {
 const MetaChip = ({ label, value }: { label: string; value: string }) => (
   <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 px-3 py-2.5">
     <p className="text-[9px] font-bold tracking-widest uppercase text-slate-400 dark:text-slate-500 mb-0.5">{label}</p>
-    <p className="text-[13px] font-semibold text-slate-800 dark:text-slate-100 truncate">{value}</p>
+    <p className="text-[13px] font-semibold text-slate-800 dark:text-slate-100 text-wrap-safe leading-snug">{value}</p>
   </div>
 );
 
 // ── Main component ────────────────────────────────────────────────────────────
 export const BillReceiptDialog = ({
   open, onOpenChange, data, isOpen, onClose,
-  billData, billDetails, onMarkPaid, isLoading, canMarkPaid,
+  billData, billDetails, onMarkPaid, onUploadPaymentQr, onUploadPaymentReceipt,
+  isUploadingPaymentQr, isUploadingPaymentReceipt, isLoading,
+  canMarkPaid, canUploadPaymentQr, canUploadPaymentReceipt,
 }: BillReceiptDialogProps) => {
   const normalizedData = useMemo(() => normalizeBillData(data ?? billData ?? billDetails), [data, billData, billDetails]);
   const printRef = useRef<HTMLDivElement>(null);
+  const paymentQrInputRef = useRef<HTMLInputElement>(null);
+  const paymentReceiptInputRef = useRef<HTMLInputElement>(null);
+  const [imagePreview, setImagePreview] = useState<{ url: string; title: string } | null>(null);
 
-  const handlePrintWithReactToPrint = useReactToPrint({
-    contentRef: printRef,
-    documentTitle: normalizedData
-      ? `farmdirect-receipt-${(normalizedData.billingId ?? normalizedData.receiptNumber ?? "receipt").toString().replace(/\s+/g, "-")}`
-      : "receipt",
-  });
+  useEffect(() => {
+    if (!imagePreview) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setImagePreview(null);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [imagePreview]);
 
   if (!normalizedData) return null;
 
   const resolvedOpen = open ?? isOpen ?? false;
   const resolvedOnOpenChange = onOpenChange ?? ((nextOpen: boolean) => { if (!nextOpen) onClose?.(); });
   const resolvedOnMarkPaid = onMarkPaid ?? normalizedData.onMarkPaid;
+  const resolvedOnUploadPaymentQr = onUploadPaymentQr ?? normalizedData.onUploadPaymentQr;
+  const resolvedOnUploadPaymentReceipt = onUploadPaymentReceipt ?? normalizedData.onUploadPaymentReceipt;
+  const resolvedCanUploadPaymentQr = canUploadPaymentQr ?? normalizedData.canUploadPaymentQr;
+  const resolvedCanUploadPaymentReceipt = canUploadPaymentReceipt ?? normalizedData.canUploadPaymentReceipt;
+  const resolvedIsUploadingPaymentQr = isUploadingPaymentQr ?? normalizedData.isUploadingPaymentQr;
+  const resolvedIsUploadingPaymentReceipt = isUploadingPaymentReceipt ?? normalizedData.isUploadingPaymentReceipt;
   const resolvedIsLoading = isLoading ?? normalizedData.isLoading;
   const isPaid = normalizedData.paymentStatus === "paid";
+  const isBuyerView = !canMarkPaid;
 
-  const handleDownloadPdf = () => {
+  const handleUploadPaymentQr = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !resolvedOnUploadPaymentQr) return;
+
+    if (!file.type.startsWith("image/")) {
+      alert("Please select an image file for payment QR.");
+      return;
+    }
+
+    if (file.size > 4 * 1024 * 1024) {
+      alert("QR image is too large. Please select up to 4MB.");
+      return;
+    }
+
     try {
-      const printable = document.getElementById("printable-bill");
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(new Error("Failed to read selected image."));
+        reader.readAsDataURL(file);
+      });
+      await resolvedOnUploadPaymentQr(dataUrl);
+    } catch {
+      alert("Failed to upload payment QR. Please try again.");
+    } finally {
+      if (paymentQrInputRef.current) paymentQrInputRef.current.value = "";
+    }
+  };
+
+  const handleUploadPaymentReceipt = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !resolvedOnUploadPaymentReceipt) return;
+
+    if (!file.type.startsWith("image/")) {
+      alert("Please select an image file for payment receipt.");
+      return;
+    }
+
+    if (file.size > 4 * 1024 * 1024) {
+      alert("Receipt image is too large. Please select up to 4MB.");
+      return;
+    }
+
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(new Error("Failed to read selected image."));
+        reader.readAsDataURL(file);
+      });
+      await resolvedOnUploadPaymentReceipt(dataUrl);
+    } catch {
+      alert("Failed to upload payment receipt. Please try again.");
+    } finally {
+      if (paymentReceiptInputRef.current) paymentReceiptInputRef.current.value = "";
+    }
+  };
+
+  const handleDownloadPdf = async () => {
+    try {
       const token = (normalizedData.billingId ?? normalizedData.receiptNumber ?? "receipt").toString().replace(/\s+/g, "-");
-      if (printable) {
-        buildPdfFromElement(printable).then(pdf => pdf.save(`farmdirect-receipt-${token}.pdf`)).catch(err => { console.warn("UI PDF failed, using fallback:", err); buildPdf(normalizedData).save(`farmdirect-receipt-${token}.pdf`); });
+      const pdf = await buildPdf(normalizedData);
+      pdf.save(`farmdirect-receipt-${token}.pdf`);
+    } catch (err) { console.error("PDF generation failed:", err); alert("Could not generate PDF."); }
+  };
+
+  const handlePrintDesktopPdf = async () => {
+    try {
+      const pdf = await buildPdf(normalizedData);
+      const blob = pdf.output("blob");
+      const url = URL.createObjectURL(blob);
+      const printWindow = window.open(url, "_blank");
+
+      if (!printWindow) {
+        alert("Popup blocked. Please allow popups to print the bill.");
+        URL.revokeObjectURL(url);
         return;
       }
-      buildPdf(normalizedData).save(`farmdirect-receipt-${token}.pdf`);
-    } catch (err) { console.error("PDF generation failed:", err); alert("Could not generate PDF."); }
+
+      const cleanup = () => URL.revokeObjectURL(url);
+      printWindow.addEventListener("load", () => {
+        printWindow.focus();
+        printWindow.print();
+        setTimeout(cleanup, 3000);
+      }, { once: true });
+    } catch (err) {
+      console.error("Print generation failed:", err);
+      alert("Could not prepare bill for printing.");
+    }
+  };
+
+  const handleDownloadPaymentQr = async () => {
+    if (!normalizedData.paymentQrUrl) return;
+
+    const sellerToken = sanitizeFileToken(normalizedData.seller?.name || "seller", "seller");
+    const billToken = sanitizeFileToken(
+      (normalizedData.billingId ?? normalizedData.receiptNumber ?? normalizedData.transactionId ?? "bill").toString(),
+      "bill"
+    );
+    const fileName = `payment-qr-${sellerToken}-${billToken}.png`;
+
+    try {
+      const imageSrc = normalizedData.paymentQrUrl;
+      const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error("Failed to load QR image"));
+        img.src = imageSrc;
+      });
+
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("Canvas not available");
+
+      const ownerLabel = `QR Owner: ${normalizedData.seller?.name || "Seller"}`;
+      const sidePadding = 24;
+      const labelHeight = 52;
+      const width = Math.max(image.naturalWidth || image.width, 320);
+      const height = Math.max(image.naturalHeight || image.height, 320);
+
+      canvas.width = width + sidePadding * 2;
+      canvas.height = height + labelHeight + sidePadding * 2;
+
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(image, sidePadding, sidePadding, width, height);
+
+      ctx.fillStyle = "#111827";
+      ctx.font = "600 20px system-ui, -apple-system, Segoe UI, Roboto, sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(ownerLabel, canvas.width / 2, sidePadding + height + 34);
+
+      const stampedUrl = canvas.toDataURL("image/png");
+      const link = document.createElement("a");
+      link.href = stampedUrl;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch {
+      const fallbackLink = document.createElement("a");
+      fallbackLink.href = normalizedData.paymentQrUrl;
+      fallbackLink.download = fileName;
+      document.body.appendChild(fallbackLink);
+      fallbackLink.click();
+      fallbackLink.remove();
+    }
   };
 
   return (
     <Dialog open={resolvedOpen} onOpenChange={resolvedOnOpenChange}>
-      <DialogContent className="w-[98vw] max-w-4xl max-h-[90vh] overflow-y-auto bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-0">
+      <DialogContent
+        className="w-[98vw] max-w-4xl max-h-[90vh] overflow-y-auto bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-0"
+        onPointerDownOutside={(event) => event.preventDefault()}
+        onInteractOutside={(event) => event.preventDefault()}
+      >
 
         {/* ── Dialog header ── */}
         <DialogHeader className="px-5 pt-5 pb-0 print:hidden">
@@ -374,7 +605,7 @@ export const BillReceiptDialog = ({
             ].map(m => (
               <div key={m.label} className="bg-white dark:bg-slate-800 px-4 py-3">
                 <p className="text-[9px] font-bold tracking-widest uppercase text-slate-400 dark:text-slate-500">{m.label}</p>
-                <p className="text-[13px] font-semibold text-slate-800 dark:text-slate-100 mt-0.5 truncate">{m.value}</p>
+                <p className="text-[13px] font-semibold text-slate-800 dark:text-slate-100 mt-0.5 text-wrap-safe leading-snug">{m.value}</p>
               </div>
             ))}
           </div>
@@ -399,7 +630,7 @@ export const BillReceiptDialog = ({
             {normalizedData.transactionId && normalizedData.transactionId !== normalizedData.billingId && (
               <div className="rounded-lg border border-dashed border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 px-4 py-2.5 flex items-center gap-2">
                 <span className="text-[9px] font-bold tracking-widest uppercase text-slate-400 dark:text-slate-500">Transaction ID</span>
-                <span className="ml-auto text-[12px] font-mono text-slate-600 dark:text-slate-300">{normalizedData.transactionId}</span>
+                <span className="ml-auto text-[12px] font-mono text-slate-600 dark:text-slate-300 break-all text-right">{normalizedData.transactionId}</span>
               </div>
             )}
 
@@ -418,7 +649,7 @@ export const BillReceiptDialog = ({
                   {normalizedData.lineItems.map((item, i) => (
                     <tr key={`${item.description}-${i}`}
                         className="bg-white dark:bg-slate-900 hover:bg-green-50/40 dark:hover:bg-green-950/20 transition-colors">
-                      <td className="px-4 py-3.5 font-medium text-slate-800 dark:text-slate-200">{item.description}</td>
+                      <td className="px-4 py-3.5 font-medium text-slate-800 dark:text-slate-200 break-words">{item.description}</td>
                       <td className="px-4 py-3.5 text-right text-slate-600 dark:text-slate-400">{item.quantity}</td>
                       <td className="px-4 py-3.5 text-right text-slate-600 dark:text-slate-400">{formatCurrency(item.unitPrice, normalizedData.currency)}</td>
                       <td className="px-4 py-3.5 text-right font-bold text-slate-900 dark:text-white">{formatCurrency(item.amount, normalizedData.currency)}</td>
@@ -459,11 +690,61 @@ export const BillReceiptDialog = ({
               </div>
             )}
 
-            {/* Notes */}
-            {normalizedData.notes && (
-              <div className="rounded-xl border border-amber-200 dark:border-amber-800/40 bg-amber-50 dark:bg-amber-950/20 px-4 py-3">
-                <p className="text-[9px] font-bold uppercase tracking-widest text-amber-700 dark:text-amber-400 mb-1">Notes</p>
-                <p className="text-[13px] text-amber-900 dark:text-amber-300">{normalizedData.notes}</p>
+            {/* Payment QR block */}
+            {normalizedData.paymentQrUrl && isBuyerView && (
+              <div className="rounded-xl border border-emerald-200 dark:border-emerald-800/60 bg-emerald-50 dark:bg-emerald-950/20 px-4 py-4">
+                <p className="text-[11px] font-bold uppercase tracking-widest text-emerald-700 dark:text-emerald-400 mb-2">
+                  Scan To Pay
+                </p>
+                <div className="flex flex-col items-center justify-center text-center gap-3">
+                  <img
+                    src={normalizedData.paymentQrUrl}
+                    alt="Payment QR code"
+                    className="w-40 h-40 object-contain rounded-lg border border-emerald-200 dark:border-emerald-800 bg-white cursor-zoom-in"
+                    onClick={() => setImagePreview({ url: normalizedData.paymentQrUrl!, title: "Payment QR" })}
+                  />
+                  <p className="text-[12px] text-emerald-800 dark:text-emerald-300">
+                    Scan and pay using this QR code.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {isBuyerView && normalizedData.paymentReceiptUrl && (
+              <div className="rounded-xl border border-blue-200 dark:border-blue-800/60 bg-blue-50 dark:bg-blue-950/20 px-4 py-4">
+                <p className="text-[11px] font-bold uppercase tracking-widest text-blue-700 dark:text-blue-400 mb-2">
+                  Uploaded Payment Receipt
+                </p>
+                <div className="flex flex-col items-center justify-center text-center gap-3">
+                  <img
+                    src={normalizedData.paymentReceiptUrl}
+                    alt="Uploaded payment receipt"
+                    className="w-48 h-48 object-contain rounded-lg border border-blue-200 dark:border-blue-800 bg-white cursor-zoom-in"
+                    onClick={() => setImagePreview({ url: normalizedData.paymentReceiptUrl!, title: "Payment Receipt" })}
+                  />
+                  <p className="text-[12px] text-blue-800 dark:text-blue-300">
+                    Payment receipt uploaded and shared with seller.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {!isBuyerView && normalizedData.paymentReceiptUrl && (
+              <div className="rounded-xl border border-indigo-200 dark:border-indigo-800/60 bg-indigo-50 dark:bg-indigo-950/20 px-4 py-4">
+                <p className="text-[11px] font-bold uppercase tracking-widest text-indigo-700 dark:text-indigo-400 mb-2">
+                  Buyer Payment Receipt
+                </p>
+                <div className="flex flex-col items-center justify-center text-center gap-3">
+                  <img
+                    src={normalizedData.paymentReceiptUrl}
+                    alt="Buyer payment receipt"
+                    className="w-48 h-48 object-contain rounded-lg border border-indigo-200 dark:border-indigo-800 bg-white cursor-zoom-in"
+                    onClick={() => setImagePreview({ url: normalizedData.paymentReceiptUrl!, title: "Buyer Payment Receipt" })}
+                  />
+                  <p className="text-[12px] text-indigo-800 dark:text-indigo-300">
+                    Verify this receipt and confirm payment.
+                  </p>
+                </div>
               </div>
             )}
 
@@ -484,12 +765,65 @@ export const BillReceiptDialog = ({
 
         {/* ── Action buttons ── */}
         <div className="flex flex-col sm:flex-row sm:flex-wrap sm:justify-end gap-2 px-4 sm:px-5 pb-5 print:hidden">
+          {resolvedCanUploadPaymentReceipt && isBuyerView && !isPaid && (
+            <>
+              <input
+                ref={paymentReceiptInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleUploadPaymentReceipt}
+                aria-label="Upload payment receipt image"
+                className="hidden"
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!!resolvedIsUploadingPaymentReceipt}
+                onClick={() => paymentReceiptInputRef.current?.click()}
+                className="w-full sm:w-auto border-blue-200 dark:border-blue-800/60 text-blue-800 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30 bg-white dark:bg-transparent"
+              >
+                <FileText className="mr-2 h-4 w-4" />
+                {resolvedIsUploadingPaymentReceipt ? "Uploading Receipt..." : normalizedData.paymentReceiptUrl ? "Update Payment Receipt" : "Upload Payment Receipt"}
+              </Button>
+            </>
+          )}
+
+          {resolvedCanUploadPaymentQr && (
+            <>
+              <input
+                ref={paymentQrInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleUploadPaymentQr}
+                aria-label="Upload payment QR image"
+                className="hidden"
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!!resolvedIsUploadingPaymentQr}
+                onClick={() => paymentQrInputRef.current?.click()}
+                className="w-full sm:w-auto border-emerald-200 dark:border-emerald-800/60 text-emerald-800 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 bg-white dark:bg-transparent"
+              >
+                <FileText className="mr-2 h-4 w-4" />
+                {resolvedIsUploadingPaymentQr ? "Uploading QR..." : normalizedData.paymentQrUrl ? "Update Payment QR" : "Upload Payment QR"}
+              </Button>
+            </>
+          )}
+
           <Button variant="outline" size="sm" onClick={handleDownloadPdf}
             className="w-full sm:w-auto border-green-200 dark:border-green-800/60 text-green-800 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-950/40 bg-white dark:bg-transparent">
             <Download className="mr-2 h-4 w-4" /> Download PDF
           </Button>
 
-          <Button size="sm" onClick={() => handlePrintWithReactToPrint()}
+          {normalizedData.paymentQrUrl && isBuyerView && (
+            <Button variant="outline" size="sm" onClick={handleDownloadPaymentQr}
+              className="w-full sm:w-auto border-emerald-200 dark:border-emerald-800/60 text-emerald-800 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 bg-white dark:bg-transparent">
+              <Download className="mr-2 h-4 w-4" /> Download Payment QR
+            </Button>
+          )}
+
+          <Button size="sm" onClick={handlePrintDesktopPdf}
             className="w-full sm:w-auto bg-gradient-to-br from-green-700 to-green-900 dark:from-green-600 dark:to-green-800 hover:from-green-800 hover:to-green-950 text-white shadow-sm">
             <Printer className="mr-2 h-4 w-4" /> Print Bill
           </Button>
@@ -510,6 +844,42 @@ export const BillReceiptDialog = ({
           )}
         </div>
       </DialogContent>
+
+      {imagePreview && (
+        <div
+          className="fixed inset-0 z-[9999] bg-black flex items-center justify-center p-4 pointer-events-auto"
+          onPointerDown={() => setImagePreview(null)}
+        >
+          <button
+            type="button"
+            aria-label="Close image preview"
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              setImagePreview(null);
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              setImagePreview(null);
+            }}
+            className="absolute top-4 right-4 px-3 py-1.5 rounded-md border border-white/50 bg-white text-slate-900 text-sm font-medium hover:bg-slate-100"
+          >
+            Close
+          </button>
+
+          <div
+            className="max-w-[95vw] max-h-[95vh]"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-2 text-white text-sm font-semibold">{imagePreview.title}</div>
+            <img
+              src={imagePreview.url}
+              alt={imagePreview.title}
+              className="max-w-[95vw] max-h-[85vh] object-contain rounded-lg border border-white/20 bg-white"
+            />
+          </div>
+        </div>
+      )}
     </Dialog>
   );
 };

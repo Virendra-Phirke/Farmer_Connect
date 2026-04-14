@@ -1,6 +1,7 @@
 import { useUser } from "@clerk/clerk-react";
 import { useUserRole } from "@/hooks/useUserRole";
 import { Navigate } from "react-router-dom";
+import { PageSkeleton } from "@/components/PageSkeleton";
 
 /**
  * After auth, checks if user has a role:
@@ -14,15 +15,8 @@ const AuthCallback = () => {
 
   if (!isLoaded || loading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-pulse text-muted-foreground font-display text-lg">
-            Setting things up...
-          </div>
-          <p className="text-sm text-muted-foreground mt-2">
-            Connecting to database...
-          </p>
-        </div>
+      <div className="min-h-screen bg-background p-4 sm:p-6">
+        <PageSkeleton type="list" />
       </div>
     );
   }

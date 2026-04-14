@@ -20,6 +20,7 @@ export type UserProfile = {
   survey_number: string | null;
   gat_number: string | null;
   avatar_url: string | null;
+  payment_qr_url: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -273,6 +274,7 @@ export async function getUserProfile(clerkUserId: string): Promise<UserProfile |
     full_name: data.full_name,
     email: data.email,
     avatar_url: data.avatar_url,
+    payment_qr_url: data.payment_qr_url || null,
     phone: phoneNumber,
     location: data.location,
     created_at: data.created_at,
@@ -374,6 +376,7 @@ export async function updateUserProfile(
   if (updates.taluka !== undefined && updates.taluka !== null) baseUpdates.taluka = updates.taluka;
   if (updates.village_city !== undefined && updates.village_city !== null) baseUpdates.village_city = updates.village_city;
   if (updates.landmark !== undefined && updates.landmark !== null) baseUpdates.landmark = updates.landmark;
+  if (updates.payment_qr_url !== undefined) baseUpdates.payment_qr_url = updates.payment_qr_url;
 
   let profileId = await getProfileId(clerkUserId);
 

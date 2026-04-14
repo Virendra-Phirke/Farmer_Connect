@@ -8,9 +8,10 @@ import {
 import DashboardLayout from "@/components/DashboardLayout";
 import { BillReceiptDialog } from "@/components/BillReceiptDialog";
 import { getProfileId } from "@/lib/supabase-auth";
-import { usePurchaseRequests } from "@/hooks/usePurchaseRequests";
-import { useSupplyContracts } from "@/hooks/useSupplyContracts";
+import { usePurchaseRequests, useUpdatePurchaseRequest } from "@/hooks/usePurchaseRequests";
+import { useSupplyContracts, useUpdateSupplyContract } from "@/hooks/useSupplyContracts";
 import { PageSkeleton } from "@/components/PageSkeleton";
+import { toast } from "sonner";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const toDateString = (value?: string) =>
@@ -151,10 +152,10 @@ function PurchaseCard({ req, onView }: { req: any; onView: () => void }) {
                             <Wheat size={16} className="text-green-700 dark:text-green-400" />
                         </div>
                         <div className="min-w-0">
-                            <h3 className="text-[13px] sm:text-[14px] font-bold text-slate-900 dark:text-white leading-tight truncate capitalize">
+                            <h3 className="text-[13px] sm:text-[14px] font-bold text-slate-900 dark:text-white leading-tight text-wrap-safe capitalize">
                                 {req.crop_listing?.crop_name || "Crop"}
                             </h3>
-                            <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5 truncate">
+                            <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5 text-wrap-safe leading-snug">
                                 {req.crop_listing?.farmer?.full_name || "Farmer"}
                             </p>
                         </div>
@@ -224,10 +225,10 @@ function ContractCard({ contract, onView }: { contract: any; onView: () => void 
                             <FileText size={16} className="text-blue-600 dark:text-blue-400" />
                         </div>
                         <div className="min-w-0">
-                            <h3 className="text-[13px] sm:text-[14px] font-bold text-slate-900 dark:text-white leading-tight truncate capitalize">
+                            <h3 className="text-[13px] sm:text-[14px] font-bold text-slate-900 dark:text-white leading-tight text-wrap-safe capitalize">
                                 {contract.crop_name}
                             </h3>
-                            <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5 truncate">
+                            <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5 text-wrap-safe leading-snug">
                                 {contract.farmer?.full_name || "Farmer"}
                             </p>
                         </div>
@@ -247,7 +248,7 @@ function ContractCard({ contract, onView }: { contract: any; onView: () => void 
                     </div>
                     <div>
                         <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Freq</p>
-                        <p className="text-[12px] font-bold text-slate-800 dark:text-slate-100 truncate">{contract.delivery_frequency || "—"}</p>
+                        <p className="text-[12px] font-bold text-slate-800 dark:text-slate-100 text-wrap-safe leading-snug">{contract.delivery_frequency || "—"}</p>
                     </div>
                     <div>
                         <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Total</p>
@@ -259,7 +260,7 @@ function ContractCard({ contract, onView }: { contract: any; onView: () => void 
                 {(contract.start_date || contract.end_date) && (
                     <div className="flex items-center gap-1 text-[11px] text-slate-400 dark:text-slate-500 mb-3">
                         <Calendar size={10} className="flex-shrink-0" />
-                        <span className="truncate">{contract.start_date} → {contract.end_date}</span>
+                        <span className="text-wrap-safe">{contract.start_date} → {contract.end_date}</span>
                     </div>
                 )}
 
@@ -299,6 +300,8 @@ const BillingPage = () => {
 
     const { data: requests,  isLoading: reqLoading  } = usePurchaseRequests(profileId ? { buyer_id: profileId } : undefined, { enabled: !!profileId });
     const { data: contracts, isLoading: conLoading  } = useSupplyContracts(profileId ? { buyer_id: profileId } : undefined, { enabled: !!profileId });
+    const updatePurchaseMutation = useUpdatePurchaseRequest();
+    const updateContractMutation = useUpdateSupplyContract();
 
     const purchaseBills  = useMemo(() => (requests  || []).filter((r: any) => r.status !== "rejected"), [requests]);
     const contractBills  = useMemo(() => (contracts || []).filter((c: any) => c.status !== "pending"),  [contracts]);
@@ -347,10 +350,13 @@ const BillingPage = () => {
         const nums = buildOfficialNumbers({ sourceId: String(req.id || req.billing_id || "REQ"), createdAt: req.created_at, kind: "PR" });
         setSelectedBill({
             title: `${cropName} - Purchase Request`,
+            source: "purchase",
             ...nums, billId: nums.billingId,
             transactionId: req.id, transactionType: "Produce Purchase",
             date: toDateString(req.created_at), amount,
             paymentStatus: req.payment_status || "unpaid",
+            paymentQrUrl: req.payment_qr_url || req.crop_listing?.farmer?.payment_qr_url,
+            paymentReceiptUrl: req.payment_receipt_url,
             paymentConfirmedAt: req.payment_status === "paid" ? new Date(req.updated_at || req.created_at).toLocaleString("en-GB") : undefined,
             status: req.status || "accepted",
             buyer:  { id: req.buyer?.id || profileId || undefined, name: req.buyer?.full_name || user?.fullName || "Buyer", phone: req.buyer?.phone, email: req.buyer?.email || user?.primaryEmailAddress?.emailAddress || undefined, address: req.buyer?.location, state: req.buyer?.state, district: req.buyer?.district, taluka: req.buyer?.taluka, village_city: req.buyer?.village_city },
@@ -368,10 +374,13 @@ const BillingPage = () => {
         const nums = buildOfficialNumbers({ sourceId: String(contract.id || contract.billing_id || "CONTRACT"), createdAt: contract.start_date || contract.created_at, kind: "SC" });
         setSelectedBill({
             title: `${contract.crop_name} - Supply Contract`,
+            source: "contract",
             ...nums, billId: nums.billingId,
             transactionId: contract.id, transactionType: "Supply Contract Delivery",
             date: toDateString(contract.start_date || contract.created_at), amount,
             paymentStatus: contract.payment_status || "unpaid",
+            paymentQrUrl: contract.payment_qr_url || contract.farmer?.payment_qr_url,
+            paymentReceiptUrl: contract.payment_receipt_url,
             paymentConfirmedAt: contract.payment_status === "paid" ? new Date(contract.updated_at || contract.created_at).toLocaleString("en-GB") : undefined,
             status: contract.status || "active",
             buyer:  { id: contract.buyer?.id || profileId || undefined, name: contract.buyer?.full_name || user?.fullName || "Buyer", phone: contract.buyer?.phone, email: contract.buyer?.email || user?.primaryEmailAddress?.emailAddress || undefined, address: contract.buyer?.location, state: contract.buyer?.state, district: contract.buyer?.district, taluka: contract.buyer?.taluka, village_city: contract.buyer?.village_city },
@@ -381,6 +390,39 @@ const BillingPage = () => {
             originalRecord: contract,
         });
         setIsBillOpen(true);
+    };
+
+    const handleUploadPaymentReceipt = async (paymentReceiptDataUrl: string) => {
+        if (!selectedBill?.transactionId) return;
+        try {
+            if (selectedBill.source === "purchase") {
+                const updated = await updatePurchaseMutation.mutateAsync({
+                    id: selectedBill.transactionId,
+                    updates: { payment_receipt_url: paymentReceiptDataUrl } as any,
+                });
+
+                setSelectedBill((prev: any) => prev ? {
+                    ...prev,
+                    paymentReceiptUrl: paymentReceiptDataUrl,
+                    originalRecord: { ...prev.originalRecord, ...(updated || {}), payment_receipt_url: paymentReceiptDataUrl },
+                } : prev);
+            } else if (selectedBill.source === "contract") {
+                const updated = await updateContractMutation.mutateAsync({
+                    id: selectedBill.transactionId,
+                    updates: { payment_receipt_url: paymentReceiptDataUrl } as any,
+                });
+
+                setSelectedBill((prev: any) => prev ? {
+                    ...prev,
+                    paymentReceiptUrl: paymentReceiptDataUrl,
+                    originalRecord: { ...prev.originalRecord, ...(updated || {}), payment_receipt_url: paymentReceiptDataUrl },
+                } : prev);
+            }
+
+            toast.success("Payment receipt uploaded. Seller has been notified to verify and confirm payment.");
+        } catch {
+            toast.error("Failed to upload payment receipt.");
+        }
     };
 
     const loading = !profileId || (reqLoading || conLoading);
@@ -451,7 +493,7 @@ const BillingPage = () => {
                                     ? <Wheat size={14} className={isActive ? "text-white/90" : ""} />
                                     : <FileText size={14} className={isActive ? "text-white/90" : ""} />
                                 }
-                                <span className="truncate">{tab.label}</span>
+                                <span className="text-wrap-safe text-center">{tab.label}</span>
                                 {tab.count > 0 && (
                                     <span className={`inline-flex items-center justify-center min-w-[18px] h-4 sm:h-5 px-1 sm:px-1.5 rounded-full text-[9px] sm:text-[10px] font-bold flex-shrink-0 ${
                                         isActive
@@ -474,8 +516,8 @@ const BillingPage = () => {
                                 className="bg-white dark:bg-slate-900 rounded-xl sm:rounded-2xl border border-slate-200 dark:border-slate-800 px-3 py-3 sm:px-5 sm:py-4 flex items-center gap-2 sm:gap-4 shadow-sm min-w-0">
                                 <span className={`w-2 h-2 sm:w-3 sm:h-3 rounded-full flex-shrink-0 ${s.dot}`} />
                                 <div className="min-w-0 flex-1">
-                                    <p className="text-[15px] sm:text-[20px] md:text-[24px] font-bold text-slate-900 dark:text-white leading-none truncate">{s.val}</p>
-                                    <p className="text-[8px] sm:text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 mt-0.5 sm:mt-1 truncate">{s.label}</p>
+                                    <p className="text-[15px] sm:text-[20px] md:text-[24px] font-bold text-slate-900 dark:text-white leading-none break-all">{s.val}</p>
+                                    <p className="text-[8px] sm:text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 mt-0.5 sm:mt-1 text-wrap-safe">{s.label}</p>
                                 </div>
                             </div>
                         ))}
@@ -528,6 +570,9 @@ const BillingPage = () => {
                 onClose={() => setIsBillOpen(false)}
                 billData={selectedBill}
                 canMarkPaid={false}
+                canUploadPaymentReceipt={true}
+                onUploadPaymentReceipt={handleUploadPaymentReceipt}
+                isUploadingPaymentReceipt={updatePurchaseMutation.isPending || updateContractMutation.isPending}
             />
         </DashboardLayout>
     );

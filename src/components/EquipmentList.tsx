@@ -166,8 +166,8 @@ export const EquipmentList = ({ profileId, equipment, isLoading }: EquipmentList
               <HoverCardTrigger asChild>
                 <div className="relative p-3 md:p-4 border rounded-lg hover:bg-accent cursor-default transition-colors">
                   <div className="pr-14">
-                    <h3 className="font-semibold text-sm md:text-base truncate">{item.equipment_name}</h3>
-                    <p className="text-xs md:text-sm text-muted-foreground truncate">
+                    <h3 className="font-semibold text-sm md:text-base text-wrap-safe leading-snug">{item.equipment_name}</h3>
+                    <p className="text-xs md:text-sm text-muted-foreground text-wrap-safe leading-snug">
                       {item.equipment_type} • Qty: {item.quantity}
                     </p>
                   </div>

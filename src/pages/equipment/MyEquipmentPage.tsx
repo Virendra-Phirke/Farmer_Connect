@@ -155,7 +155,7 @@ const MyEquipmentPage = () => {
     };
 
     /* ── shared dialog form ─────────────────────────────────────────────── */
-    const EquipmentForm = ({ onSubmit, isPending, submitLabel }: {
+    const renderEquipmentForm = ({ onSubmit, isPending, submitLabel }: {
         onSubmit: () => void; isPending: boolean; submitLabel: string;
     }) => (
         <div className="space-y-3 pt-1">
@@ -367,7 +367,7 @@ const MyEquipmentPage = () => {
                                                 <Tractor size={16} />
                                             </div>
                                             <div className="flex-1 min-w-0">
-                                                <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100 leading-tight truncate">
+                                                <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100 leading-tight text-wrap-safe">
                                                     {item.name}
                                                 </h3>
                                                 <p className="text-[11px] text-gray-400 dark:text-gray-500 capitalize mt-0.5 flex items-center gap-1">
@@ -387,7 +387,7 @@ const MyEquipmentPage = () => {
                                         {/* location */}
                                         <div className="flex items-center gap-1 text-[11px] text-gray-400 dark:text-gray-500 mb-3">
                                             <MapPin size={9} className="text-teal-500 flex-shrink-0" />
-                                            <span className="truncate">{item.location || "—"}</span>
+                                            <span className="text-wrap-safe">{item.location || "—"}</span>
                                         </div>
 
                                         {/* availability */}
@@ -498,7 +498,7 @@ const MyEquipmentPage = () => {
                         </div>
                     </div>
                     <div className="px-5 py-4">
-                        <EquipmentForm onSubmit={handleCreate} isPending={createMutation.isPending} submitLabel="List Equipment" />
+                        {renderEquipmentForm({ onSubmit: handleCreate, isPending: createMutation.isPending, submitLabel: "List Equipment" })}
                     </div>
                 </DialogContent>
             </Dialog>
@@ -521,14 +521,14 @@ const MyEquipmentPage = () => {
                             </div>
                             <div>
                                 <h2 className="text-sm font-bold text-white">Edit Equipment</h2>
-                                <p className="text-teal-100/70 text-xs truncate max-w-[260px]">
+                                <p className="text-teal-100/70 text-xs text-wrap-safe max-w-[260px]">
                                     {editingItem?.name}
                                 </p>
                             </div>
                         </div>
                     </div>
                     <div className="px-5 py-4">
-                        <EquipmentForm onSubmit={handleUpdate} isPending={updateMutation.isPending} submitLabel="Update Equipment" />
+                        {renderEquipmentForm({ onSubmit: handleUpdate, isPending: updateMutation.isPending, submitLabel: "Update Equipment" })}
                     </div>
                 </DialogContent>
             </Dialog>

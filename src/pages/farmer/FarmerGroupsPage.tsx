@@ -450,12 +450,12 @@ const FarmerGroupsPage = () => {
                                                 </div>
 
                                                 <div className="flex-1 min-w-0">
-                                                    <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100 leading-snug truncate">
+                                                    <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100 leading-snug text-wrap-safe">
                                                         {group.name}
                                                     </h3>
                                                     <div className="flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500 mt-0.5">
                                                         <MapPin size={10} />
-                                                        <span className="truncate">{locationStr}</span>
+                                                        <span className="text-wrap-safe">{locationStr}</span>
                                                     </div>
                                                 </div>
 

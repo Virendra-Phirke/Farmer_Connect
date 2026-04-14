@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { useUser } from "@clerk/clerk-react";
-import { getProfileId } from "@/lib/supabase-auth";
+import { useLocation, useNavigate } from "react-router-dom";
+import { getProfileId, updateUserProfile } from "@/lib/supabase-auth";
 import { useSupplyContracts, useUpdateSupplyContract } from "@/hooks/useSupplyContracts";
-import { useEquipmentBookings } from "@/hooks/useEquipmentBookings";
+import { useEquipmentBookings, useUpdateEquipmentBooking } from "@/hooks/useEquipmentBookings";
 import { getEquipmentPaymentStatus } from "@/lib/api/equipment-bookings";
 import DashboardLayout from "@/components/DashboardLayout";
 import {
@@ -185,12 +186,15 @@ type Tab = "contracts" | "rentals";
 
 const MyContractsPage = () => {
     const { user }      = useUser();
+    const location = useLocation();
+    const navigate = useNavigate();
     const [profileId,   setProfileId]   = useState<string | null>(null);
     const [activeTab,   setActiveTab]   = useState<Tab>("contracts");
     const [searchQuery, setSearchQuery] = useState("");
     const [isBillOpen,  setIsBillOpen]  = useState(false);
     const [selectedBill,setSelectedBill]= useState<any>(null);
     const updateContract = useUpdateSupplyContract();
+    const updateRental = useUpdateEquipmentBooking();
 
     useEffect(() => {
         if (user?.id) getProfileId(user.id).then(setProfileId);
@@ -230,6 +234,8 @@ const MyContractsPage = () => {
             transactionId: c.id, transactionType: "Supply Contract Delivery",
             date: new Date(c.created_at || new Date()).toLocaleDateString(),
             amount, paymentStatus: c.payment_status || "unpaid",
+            paymentQrUrl: c.payment_qr_url || c.farmer?.payment_qr_url,
+            paymentReceiptUrl: c.payment_receipt_url,
             paymentConfirmedAt: c.payment_status === "paid"
                 ? new Date(c.updated_at || c.created_at).toLocaleString() : undefined,
             status: c.status || "active",
@@ -254,6 +260,8 @@ const MyContractsPage = () => {
             transactionId: booking.id, transactionType: "Equipment Rental",
             date: new Date(booking.created_at || new Date()).toLocaleDateString(),
             amount, paymentStatus: getEquipmentPaymentStatus(booking),
+            paymentQrUrl: booking.payment_qr_url || booking.equipment?.owner?.payment_qr_url,
+            paymentReceiptUrl: booking.payment_receipt_url,
             status: booking.status || "confirmed",
             buyerName: user?.fullName || "Renter",
             buyer:  { id: booking.renter?.id || profileId || undefined, name: booking.renter?.full_name || user?.fullName || "Renter", phone: booking.renter?.phone, email: booking.renter?.email || user?.primaryEmailAddress?.emailAddress || undefined, address: booking.renter?.location, state: booking.renter?.state, district: booking.renter?.district, taluka: booking.renter?.taluka, village_city: booking.renter?.village_city },
@@ -266,6 +274,18 @@ const MyContractsPage = () => {
         setIsBillOpen(true);
     };
 
+    useEffect(() => {
+        const navState = (location.state || {}) as { openBillId?: string; openBillSource?: string };
+        if (navState.openBillSource !== "supply" || !navState.openBillId || !contracts?.length) return;
+
+        const target = contracts.find((contract: any) => contract.id === navState.openBillId);
+        if (!target) return;
+
+        setActiveTab("contracts");
+        openBill(target);
+        navigate(location.pathname, { replace: true, state: null });
+    }, [contracts, location.pathname, location.state, navigate]);
+
     const handleMarkPaid = async () => {
         const isActualSeller = selectedBill?.source === "supply" && selectedBill?.originalRecord?.farmer_id === profileId;
         if (selectedBill && selectedBill.source === "supply" && isActualSeller && selectedBill?.originalRecord?.payment_status !== "paid") {
@@ -274,6 +294,53 @@ const MyContractsPage = () => {
                 setIsBillOpen(false);
                 toast.success("Payment marked as complete.");
             } catch { toast.error("Failed to mark payment as complete."); }
+        }
+    };
+
+    const handleUploadPaymentQr = async (paymentQrDataUrl: string) => {
+        const isActualSeller = selectedBill?.source === "supply" && selectedBill?.originalRecord?.farmer_id === profileId;
+        if (!selectedBill?.originalRecord?.id || !isActualSeller) return;
+
+        try {
+            const updated = await updateContract.mutateAsync({
+                id: selectedBill.originalRecord.id,
+                updates: { payment_qr_url: paymentQrDataUrl } as any,
+            });
+
+            if (user?.id) {
+                await updateUserProfile(user.id, { payment_qr_url: paymentQrDataUrl } as any);
+            }
+
+            setSelectedBill((prev: any) => prev ? {
+                ...prev,
+                paymentQrUrl: paymentQrDataUrl,
+                originalRecord: { ...prev.originalRecord, ...(updated || {}), payment_qr_url: paymentQrDataUrl },
+            } : prev);
+            toast.success("Payment QR uploaded.");
+        } catch {
+            toast.error("Failed to upload payment QR.");
+        }
+    };
+
+    const handleUploadPaymentReceipt = async (paymentReceiptDataUrl: string) => {
+        const isActualBuyer = selectedBill?.source === "rental" && selectedBill?.originalRecord?.renter_id === profileId;
+        if (!selectedBill?.originalRecord?.id || !isActualBuyer) return;
+
+        try {
+            const updated = await updateRental.mutateAsync({
+                id: selectedBill.originalRecord.id,
+                updates: { payment_receipt_url: paymentReceiptDataUrl } as any,
+            });
+
+            setSelectedBill((prev: any) => prev ? {
+                ...prev,
+                paymentReceiptUrl: paymentReceiptDataUrl,
+                originalRecord: { ...prev.originalRecord, ...(updated || {}), payment_receipt_url: paymentReceiptDataUrl },
+            } : prev);
+
+            toast.success("Payment receipt uploaded. Seller has been notified to verify and confirm payment.");
+        } catch {
+            toast.error("Failed to upload payment receipt.");
         }
     };
 
@@ -449,6 +516,12 @@ const MyContractsPage = () => {
                     billData={selectedBill}
                     canMarkPaid={selectedBill?.source === "supply" && selectedBill?.originalRecord?.farmer_id === profileId}
                     onMarkPaid={handleMarkPaid}
+                    canUploadPaymentQr={selectedBill?.source === "supply" && selectedBill?.originalRecord?.farmer_id === profileId}
+                    onUploadPaymentQr={handleUploadPaymentQr}
+                    isUploadingPaymentQr={updateContract.isPending}
+                    canUploadPaymentReceipt={selectedBill?.source === "rental" && selectedBill?.originalRecord?.renter_id === profileId}
+                    onUploadPaymentReceipt={handleUploadPaymentReceipt}
+                    isUploadingPaymentReceipt={updateRental.isPending}
                     isLoading={updateContract.isPending}
                 />
             )}

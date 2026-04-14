@@ -211,8 +211,8 @@ export const FarmsList = ({ profileId, farms, isLoading }: FarmListProps) => {
                             <HoverCardTrigger asChild>
                                 <div className="relative p-3 md:p-4 border rounded-lg hover:bg-accent cursor-default transition-colors">
                                     <div className="pr-14">
-                                        <h3 className="font-semibold text-sm md:text-base truncate">{farm.farm_name}</h3>
-                                        <p className="text-xs md:text-sm text-muted-foreground truncate">
+                                        <h3 className="font-semibold text-sm md:text-base text-wrap-safe leading-snug">{farm.farm_name}</h3>
+                                        <p className="text-xs md:text-sm text-muted-foreground text-wrap-safe leading-snug">
                                             {farm.district}, {farm.state}
                                         </p>
                                     </div>

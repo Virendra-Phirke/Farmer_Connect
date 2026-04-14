@@ -7,8 +7,8 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { ClerkProvider, SignedIn, SignedOut, RedirectToSignIn } from '@clerk/clerk-react';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { CLERK_PUBLISHABLE_KEY } from '@/lib/clerk';
-import { Loader2 } from 'lucide-react';
 import { initializeTheme } from '@/lib/theme';
+import { PageSkeleton } from '@/components/PageSkeleton';
 
 import Index from './pages/Index';
 import SignIn from './pages/SignIn';
@@ -74,8 +74,8 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => (
 );
 
 const PageLoader = () => (
-  <div className="min-h-screen flex items-center justify-center">
-    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+  <div className="p-4 sm:p-6">
+    <PageSkeleton type="grid" />
   </div>
 );
 

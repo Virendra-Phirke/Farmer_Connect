@@ -26,6 +26,21 @@ const rolePaths: Record<string, string> = {
     hotel_restaurant_manager: "/hotel-dashboard",
 };
 
+const PAYMENT_RECEIPT_MARKER = "[payment_receipt_url]";
+
+const parsePaymentReceiptReference = (record: any): string => {
+    const direct = String(record?.payment_receipt_url || "").trim();
+    if (direct) return direct;
+
+    const text = `${String(record?.notes || "")}\n${String(record?.message || "")}`;
+    const line = text
+        .split("\n")
+        .map((l) => l.trim())
+        .find((l) => l.startsWith(PAYMENT_RECEIPT_MARKER));
+
+    return line?.replace(PAYMENT_RECEIPT_MARKER, "").trim() || "";
+};
+
 type DashboardLayoutProps = {
     children: React.ReactNode;
     subtitle: string;
@@ -50,12 +65,14 @@ const DashboardLayout = ({
     const farmerContractsRef = useRef<Record<string, string>>({});
     const equipmentRequestsRef = useRef<Record<string, string>>({});
     const farmerCropRequestsRef = useRef<Record<string, string>>({});
+    const notifiedReceiptKeysRef = useRef<Set<string>>(new Set());
 
     // Check if we are on one of the main dashboard pages
     const isDashboardRoot = location.pathname.includes("-dashboard");
 
     const [profileId, setProfileId] = useState<string | null>(null);
     const [notificationCenterOpen, setNotificationCenterOpen] = useState(false);
+    const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
     const { isDark, toggleTheme } = useTheme();
     useEffect(() => {
         if (user?.id) getProfileId(user.id).then(setProfileId);
@@ -116,17 +133,64 @@ const DashboardLayout = ({
     const pendingSupplyContracts = hotelContracts?.filter((c: any) => c.status === "pending").length || 0;
     const pendingFarmerContracts = farmerContracts?.filter((c: any) => c.status === "pending").length || 0;
 
-    // Only count PENDING notifications for the badge
-    const totalNotifications = role === "farmer"
-        ? pendingCropRequests + pendingFarmerRentals + pendingFarmerContracts
-        : role === "equipment_owner"
-            ? pendingEquipmentRequests
-            : pendingSupplyContracts;
+    const pendingFarmerReceiptConfirmations =
+        (cropRequests?.filter((request: any) => {
+            const hasReceipt = !!parsePaymentReceiptReference(request);
+            const isPaid = String(request?.payment_status || "").toLowerCase() === "paid";
+            return hasReceipt && !isPaid;
+        }).length || 0) +
+        (farmerContracts?.filter((contract: any) => {
+            const hasReceipt = !!parsePaymentReceiptReference(contract);
+            const isPaid = String(contract?.payment_status || "").toLowerCase() === "paid";
+            return hasReceipt && !isPaid;
+        }).length || 0);
+
+    const pendingEquipmentReceiptConfirmations =
+        equipmentRequests?.filter((booking: any) => {
+            const hasReceipt = !!parsePaymentReceiptReference(booking);
+            const isPaid = getEquipmentPaymentStatus(booking) === "paid";
+            return hasReceipt && !isPaid;
+        }).length || 0;
 
     useEffect(() => {
         if (!role || !profileId) return;
 
-        const getSignature = (item: any) => `${item.status || "unknown"}|${item.payment_status || getEquipmentPaymentStatus(item) || "na"}`;
+        const getSignature = (item: any) => {
+            const receiptRef = parsePaymentReceiptReference(item);
+            return `${item.status || "unknown"}|${item.payment_status || getEquipmentPaymentStatus(item) || "na"}|receipt:${receiptRef}`;
+        };
+
+        const getReceiptFromSignature = (value: string | undefined) => String(value || "").split("|receipt:")[1] || "";
+        const shouldNotifyReceipt = (scope: string, itemId: string, receiptRef: string) => {
+            if (!receiptRef) return false;
+            const key = `${scope}:${itemId}:${receiptRef}`;
+            if (notifiedReceiptKeysRef.current.has(key)) return false;
+            notifiedReceiptKeysRef.current.add(key);
+            return true;
+        };
+
+        const notifyPurchaseReceipt = (request: any) => {
+            const cropName = request?.crop_listing?.crop_name || "Crop";
+            const qty = Number(request?.quantity_kg || 0);
+            const amount = Number(request?.total_amount ?? (Number(request?.quantity_kg || 0) * Number(request?.offered_price || 0)));
+            const requestRef = String(request?.billing_id || request?.id || "").slice(0, 8).toUpperCase();
+            toast.info(`Payment receipt uploaded for purchase ${cropName}${qty > 0 ? ` (${qty} kg)` : ""}${amount > 0 ? `, amount Rs.${amount}` : ""}${requestRef ? ` [${requestRef}]` : ""}.`);
+        };
+
+        const notifyContractReceipt = (contract: any) => {
+            const cropName = contract?.crop_name || "Contract crop";
+            const qty = Number(contract?.quantity_kg_per_delivery || 0);
+            const amount = Number(contract?.total_amount ?? (qty * Number(contract?.price_per_kg || 0)));
+            const contractRef = String(contract?.billing_id || contract?.id || "").slice(0, 8).toUpperCase();
+            toast.info(`Payment receipt uploaded for contract ${cropName}${qty > 0 ? ` (${qty} kg)` : ""}${amount > 0 ? `, amount Rs.${amount}` : ""}${contractRef ? ` [${contractRef}]` : ""}.`);
+        };
+
+        const notifyRentalReceipt = (booking: any) => {
+            const equipmentName = booking?.equipment?.name || "Equipment rental";
+            const amount = Number(booking?.total_price || 0);
+            const bookingRef = String(booking?.billing_id || booking?.id || "").slice(0, 8).toUpperCase();
+            toast.info(`Payment receipt uploaded for rental ${equipmentName}${amount > 0 ? `, amount Rs.${amount}` : ""}${bookingRef ? ` [${bookingRef}]` : ""}.`);
+        };
 
         if (role === "hotel_restaurant_manager") {
             const currentMap: Record<string, string> = {};
@@ -160,6 +224,25 @@ const DashboardLayout = ({
                 cropRequestMap[request.id] = getSignature(request);
             });
 
+            if (!notificationsInitializedRef.current) {
+                const pendingReceiptCount = (cropRequests || []).filter((request: any) => {
+                    const receipt = parsePaymentReceiptReference(request);
+                    const paid = String(request?.payment_status || "").toLowerCase() === "paid";
+                    return !!receipt && !paid;
+                }).length;
+                if (pendingReceiptCount > 0) {
+                    toast.info(`You have ${pendingReceiptCount} payment receipt${pendingReceiptCount > 1 ? "s" : ""} awaiting confirmation.`);
+                }
+            }
+
+            (cropRequests || []).forEach((request: any) => {
+                const receiptRef = parsePaymentReceiptReference(request);
+                const paid = String(request?.payment_status || "").toLowerCase() === "paid";
+                if (!paid && shouldNotifyReceipt("farmer-purchase", String(request?.id || ""), receiptRef)) {
+                    notifyPurchaseReceipt(request);
+                }
+            });
+
             if (notificationsInitializedRef.current) {
                 (cropRequests || []).forEach((request: any) => {
                     const prev = farmerCropRequestsRef.current[request.id];
@@ -168,6 +251,11 @@ const DashboardLayout = ({
                         toast.info("New crop purchase request received.");
                     }
                     if (prev && prev !== curr) {
+                        const prevReceipt = getReceiptFromSignature(prev);
+                        const currReceipt = getReceiptFromSignature(curr);
+                        if (!prevReceipt && currReceipt) {
+                            // Detailed receipt toast is handled by shouldNotifyReceipt() block.
+                        }
                         if (request.status === "accepted") {
                             toast.success("A purchase request was accepted and billing is available.");
                         } else if (request.status === "rejected") {
@@ -211,11 +299,35 @@ const DashboardLayout = ({
                 contractMap[contract.id] = getSignature(contract);
             });
 
+            if (!notificationsInitializedRef.current) {
+                const pendingContractReceiptCount = (farmerContracts || []).filter((contract: any) => {
+                    const receipt = parsePaymentReceiptReference(contract);
+                    const paid = String(contract?.payment_status || "").toLowerCase() === "paid";
+                    return !!receipt && !paid;
+                }).length;
+                if (pendingContractReceiptCount > 0) {
+                    toast.info(`You have ${pendingContractReceiptCount} contract payment receipt${pendingContractReceiptCount > 1 ? "s" : ""} awaiting confirmation.`);
+                }
+            }
+
+            (farmerContracts || []).forEach((contract: any) => {
+                const receiptRef = parsePaymentReceiptReference(contract);
+                const paid = String(contract?.payment_status || "").toLowerCase() === "paid";
+                if (!paid && shouldNotifyReceipt("farmer-contract", String(contract?.id || ""), receiptRef)) {
+                    notifyContractReceipt(contract);
+                }
+            });
+
             if (notificationsInitializedRef.current) {
                 (farmerContracts || []).forEach((contract: any) => {
                     const prev = farmerContractsRef.current[contract.id];
                     const curr = contractMap[contract.id];
                     if (prev && prev !== curr) {
+                        const prevReceipt = getReceiptFromSignature(prev);
+                        const currReceipt = getReceiptFromSignature(curr);
+                        if (!prevReceipt && currReceipt) {
+                            // Detailed receipt toast is handled by shouldNotifyReceipt() block.
+                        }
                         if (contract.status === "active") {
                             toast.success("A supply contract was activated. Billing is available in My Contracts.");
                         } else if (contract.status === "cancelled") {
@@ -237,11 +349,35 @@ const DashboardLayout = ({
                 bookingMap[booking.id] = getSignature(booking);
             });
 
+            if (!notificationsInitializedRef.current) {
+                const pendingRentalReceiptCount = (equipmentRequests || []).filter((booking: any) => {
+                    const receipt = parsePaymentReceiptReference(booking);
+                    const paid = getEquipmentPaymentStatus(booking) === "paid";
+                    return !!receipt && !paid;
+                }).length;
+                if (pendingRentalReceiptCount > 0) {
+                    toast.info(`You have ${pendingRentalReceiptCount} rental payment receipt${pendingRentalReceiptCount > 1 ? "s" : ""} awaiting confirmation.`);
+                }
+            }
+
+            (equipmentRequests || []).forEach((booking: any) => {
+                const receiptRef = parsePaymentReceiptReference(booking);
+                const paid = getEquipmentPaymentStatus(booking) === "paid";
+                if (!paid && shouldNotifyReceipt("equipment-rental", String(booking?.id || ""), receiptRef)) {
+                    notifyRentalReceipt(booking);
+                }
+            });
+
             if (notificationsInitializedRef.current) {
                 (equipmentRequests || []).forEach((booking: any) => {
                     const prev = equipmentRequestsRef.current[booking.id];
                     const curr = bookingMap[booking.id];
                     if (prev && prev !== curr) {
+                        const prevReceipt = getReceiptFromSignature(prev);
+                        const currReceipt = getReceiptFromSignature(curr);
+                        if (!prevReceipt && currReceipt) {
+                            // Detailed receipt toast is handled by shouldNotifyReceipt() block.
+                        }
                         if (booking.status === "pending") {
                             toast.info("New equipment rental request received.");
                         }
@@ -282,7 +418,28 @@ const DashboardLayout = ({
 
                         {location.pathname !== '/' && (
                             <nav className="hidden md:flex items-center ml-3 space-x-1 text-sm text-muted-foreground mt-0.5">
-                                {location.pathname.split('/').filter(Boolean).map((path, index, array) => {
+                                {(() => {
+                                    const pathSegments = location.pathname.split('/').filter(Boolean);
+                                    const firstSegment = pathSegments[0];
+                                    const shouldPrefixDashboard =
+                                        !!rolePaths[role || ""] &&
+                                        !isDashboardRoot &&
+                                        firstSegment !== "farmer" &&
+                                        firstSegment !== "equipment" &&
+                                        firstSegment !== "hotel";
+
+                                    return (
+                                        <>
+                                            {shouldPrefixDashboard && (
+                                                <div className="flex items-center space-x-1">
+                                                    <ChevronRight className="h-4 w-4 text-muted-foreground/50" />
+                                                    <Link to={rolePaths[role || ""]} className="hover:text-foreground transition-colors">
+                                                        Dashboard
+                                                    </Link>
+                                                </div>
+                                            )}
+
+                                            {pathSegments.map((path, index, array) => {
                                     const isLast = index === array.length - 1;
                                     
                                     // Handle proper routing back to dashboards
@@ -312,6 +469,9 @@ const DashboardLayout = ({
                                         </div>
                                     );
                                 })}
+                                        </>
+                                    );
+                                })()}
                             </nav>
                         )}
                     </div>
@@ -330,7 +490,7 @@ const DashboardLayout = ({
                         {role && (
                             <Button variant="ghost" size="icon" className="relative text-muted-foreground hover:text-foreground" onClick={() => setNotificationCenterOpen(true)}>
                                 <Bell className="h-5 w-5" />
-                                {totalNotifications > 0 && (
+                                {unreadNotificationCount > 0 && (
                                     <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full"></span>
                                 )}
                             </Button>
@@ -362,7 +522,11 @@ const DashboardLayout = ({
                 {children}
             </main>
 
-            <NotificationCenter open={notificationCenterOpen} onOpenChange={setNotificationCenterOpen} />
+            <NotificationCenter
+                open={notificationCenterOpen}
+                onOpenChange={setNotificationCenterOpen}
+                onUnreadCountChange={setUnreadNotificationCount}
+            />
         </div>
     );
 };

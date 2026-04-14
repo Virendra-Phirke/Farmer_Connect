@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { useUser } from "@clerk/clerk-react";
-import { getProfileId } from "@/lib/supabase-auth";
+import { useLocation, useNavigate } from "react-router-dom";
+import { getProfileId, updateUserProfile } from "@/lib/supabase-auth";
 import { useOwnerBookings, useUpdateEquipmentBooking } from "@/hooks/useEquipmentBookings";
 import { getEquipmentPaymentStatus } from "@/lib/api/equipment-bookings";
 import DashboardLayout from "@/components/DashboardLayout";
@@ -12,6 +13,7 @@ import {
 import { toast } from "sonner";
 import { BillReceiptDialog } from "@/components/BillReceiptDialog";
 import { PageSkeleton } from "@/components/PageSkeleton";
+import { stripPaymentMarkerLines } from "@/lib/payment-markers";
 
 // ─── Status Badge ─────────────────────────────────────────────────────────────
 function StatusBadge({ status }: { status: string }) {
@@ -41,9 +43,9 @@ function StatusBadge({ status }: { status: string }) {
 // ─── Info Row ─────────────────────────────────────────────────────────────────
 function InfoRow({ Icon, children }: { Icon: React.ElementType; children: React.ReactNode }) {
     return (
-        <div className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+        <div className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400 min-w-0">
             <Icon size={11} className="flex-shrink-0 opacity-60" />
-            <span className="truncate">{children}</span>
+            <span className="text-wrap-safe leading-snug">{children}</span>
         </div>
     );
 }
@@ -73,6 +75,7 @@ function PendingCard({ booking, onConfirm, onDecline, isLoading }: {
     const qty   = booking.quantity || 1;
     const ppd   = booking.equipment?.price_per_day || 0;
     const total = Number(booking.total_price || 0);
+    const visibleNotes = stripPaymentMarkerLines(booking.notes);
     return (
         <div className="group bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800
             overflow-hidden hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200">
@@ -87,7 +90,7 @@ function PendingCard({ booking, onConfirm, onDecline, isLoading }: {
                             <Tractor size={18} className="text-amber-600 dark:text-amber-400" />
                         </div>
                         <div className="min-w-0">
-                            <h3 className="text-[14px] font-bold text-slate-900 dark:text-white leading-tight truncate">
+                            <h3 className="text-[14px] font-bold text-slate-900 dark:text-white leading-tight text-wrap-safe">
                                 {booking.equipment?.name || "Equipment"}
                             </h3>
                             <div className="flex items-center gap-1 text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
@@ -121,7 +124,7 @@ function PendingCard({ booking, onConfirm, onDecline, isLoading }: {
                     <InfoRow Icon={Users}>{booking.renter?.full_name || "Renter"}</InfoRow>
                     {booking.renter?.phone    && <InfoRow Icon={Receipt}>{booking.renter.phone}</InfoRow>}
                     {booking.renter?.location && <InfoRow Icon={Calendar}>{booking.renter.location}</InfoRow>}
-                    {booking.notes            && <InfoRow Icon={FileText}>{booking.notes}</InfoRow>}
+                    {visibleNotes             && <InfoRow Icon={FileText}>{visibleNotes}</InfoRow>}
                 </div>
 
                 {/* Actions */}
@@ -176,7 +179,7 @@ function HistoryCard({ booking, onViewBill }: { booking: any; onViewBill: () => 
                             <Tractor size={18} className={isCancelled ? "text-red-500 dark:text-red-400" : "text-green-700 dark:text-green-400"} />
                         </div>
                         <div className="min-w-0">
-                            <h3 className="text-[14px] font-bold text-slate-900 dark:text-white leading-tight truncate">
+                            <h3 className="text-[14px] font-bold text-slate-900 dark:text-white leading-tight text-wrap-safe">
                                 {booking.equipment?.name || "Equipment"}
                             </h3>
                             <div className="flex items-center gap-1 text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
@@ -241,6 +244,8 @@ type Tab = "pending" | "history";
 
 const RentalRequestsPage = () => {
     const { user } = useUser();
+    const location = useLocation();
+    const navigate = useNavigate();
     const [profileId,      setProfileId]       = useState<string | null>(null);
     const [activeTab,      setActiveTab]        = useState<Tab>("pending");
     const [isBillOpen,     setIsBillOpen]       = useState(false);
@@ -297,6 +302,8 @@ const RentalRequestsPage = () => {
             sellerName: user?.fullName || "You",
             paymentConfirmedAt: getEquipmentPaymentStatus(booking) === "paid" ? new Date(booking.updated_at || booking.created_at).toLocaleString() : undefined,
             paymentStatus: getEquipmentPaymentStatus(booking),
+            paymentQrUrl: booking.payment_qr_url || booking.equipment?.owner?.payment_qr_url,
+            paymentReceiptUrl: booking.payment_receipt_url,
             paymentMethod: "Cash / UPI / Bank Transfer",
             buyer:  { id: booking.renter?.id, name: booking.renter?.full_name || "Renter", phone: booking.renter?.phone, email: booking.renter?.email, address: booking.renter?.location, state: booking.renter?.state, district: booking.renter?.district, taluka: booking.renter?.taluka, village_city: booking.renter?.village_city },
             seller: { id: booking.equipment?.owner?.id || profileId || undefined, name: booking.equipment?.owner?.full_name || user?.fullName || "Equipment Owner", phone: booking.equipment?.owner?.phone || user?.phoneNumbers?.[0]?.phoneNumber, email: booking.equipment?.owner?.email || user?.primaryEmailAddress?.emailAddress || undefined, address: booking.equipment?.owner?.location || booking.equipment?.location, state: booking.equipment?.owner?.state, district: booking.equipment?.owner?.district, taluka: booking.equipment?.owner?.taluka, village_city: booking.equipment?.owner?.village_city },
@@ -308,6 +315,20 @@ const RentalRequestsPage = () => {
         setIsBillOpen(true);
     };
 
+    useEffect(() => {
+        const navState = (location.state || {}) as { openBillId?: string; openBillSource?: string };
+        if (navState.openBillSource !== "rental-owner" || !navState.openBillId || !bookings?.length) return;
+
+        const target = bookings.find((booking: any) => booking.id === navState.openBillId);
+        if (!target) return;
+
+        if (target.status !== "pending") {
+            setActiveTab("history");
+        }
+        showBill(target);
+        navigate(location.pathname, { replace: true, state: null });
+    }, [bookings, location.pathname, location.state, navigate]);
+
     const handleMarkPaid = async () => {
         const isActualSeller = selectedBooking?.originalRecord?.equipment?.owner_id === profileId;
         if (!selectedBooking?.originalRecord?.id || getEquipmentPaymentStatus(selectedBooking?.originalRecord) === "paid" || !isActualSeller) return;
@@ -316,6 +337,31 @@ const RentalRequestsPage = () => {
             setIsBillOpen(false);
             toast.success("Payment marked as complete.");
         } catch { toast.error("Failed to mark payment as complete."); }
+    };
+
+    const handleUploadPaymentQr = async (paymentQrDataUrl: string) => {
+        const isActualSeller = selectedBooking?.originalRecord?.equipment?.owner_id === profileId;
+        if (!selectedBooking?.originalRecord?.id || !isActualSeller) return;
+
+        try {
+            const updated = await updateMutation.mutateAsync({
+                id: selectedBooking.originalRecord.id,
+                updates: { payment_qr_url: paymentQrDataUrl } as any,
+            });
+
+            if (user?.id) {
+                await updateUserProfile(user.id, { payment_qr_url: paymentQrDataUrl } as any);
+            }
+
+            setSelectedBooking((prev: any) => prev ? {
+                ...prev,
+                paymentQrUrl: paymentQrDataUrl,
+                originalRecord: { ...prev.originalRecord, ...(updated || {}), payment_qr_url: paymentQrDataUrl },
+            } : prev);
+            toast.success("Payment QR uploaded.");
+        } catch {
+            toast.error("Failed to upload payment QR.");
+        }
     };
 
     const loading = !profileId || isLoading;
@@ -411,7 +457,7 @@ const RentalRequestsPage = () => {
                                 className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 px-5 py-4 flex items-center gap-4 shadow-sm">
                                 <span className={`w-3 h-3 rounded-full flex-shrink-0 ${s.dot}`} />
                                 <div className="min-w-0">
-                                    <p className="text-[24px] sm:text-[28px] font-bold text-slate-900 dark:text-white leading-none truncate">{s.val}</p>
+                                    <p className="text-[24px] sm:text-[28px] font-bold text-slate-900 dark:text-white leading-none break-all">{s.val}</p>
                                     <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 mt-1">{s.label}</p>
                                 </div>
                             </div>
@@ -472,6 +518,9 @@ const RentalRequestsPage = () => {
                 billDetails={selectedBooking}
                 canMarkPaid={selectedBooking?.originalRecord?.equipment?.owner_id === profileId}
                 onMarkPaid={handleMarkPaid}
+                canUploadPaymentQr={selectedBooking?.originalRecord?.equipment?.owner_id === profileId}
+                onUploadPaymentQr={handleUploadPaymentQr}
+                isUploadingPaymentQr={updateMutation.isPending}
                 isLoading={updateMutation.isPending}
             />
         </DashboardLayout>

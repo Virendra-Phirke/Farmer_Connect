@@ -384,7 +384,7 @@ const BrowseEquipmentPage = () => {
                                                     <Tractor size={16} />
                                                 </div>
                                                 <div className="flex-1 min-w-0">
-                                                    <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100 leading-tight truncate">
+                                                    <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100 leading-tight text-wrap-safe">
                                                         {item.name}
                                                     </h3>
                                                     <p className="text-[11px] text-gray-400 dark:text-gray-500 capitalize mt-0.5">
@@ -408,7 +408,7 @@ const BrowseEquipmentPage = () => {
                                             <div className="flex items-center gap-1 mb-3
                                                 text-[11px] text-gray-400 dark:text-gray-500">
                                                 <MapPin size={9} className="text-teal-500 flex-shrink-0" />
-                                                <span className="truncate">{item.location || "Location not specified"}</span>
+                                                <span className="text-wrap-safe">{item.location || "Location not specified"}</span>
                                             </div>
 
                                             {/* price + stock */}

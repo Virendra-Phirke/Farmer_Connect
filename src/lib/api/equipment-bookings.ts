@@ -8,6 +8,8 @@ export type EquipmentBooking = {
     end_date: string;
     status: "pending" | "confirmed" | "completed" | "cancelled";
     payment_status?: "unpaid" | "paid";
+    payment_qr_url?: string | null;
+    payment_receipt_url?: string | null;
     billing_id?: string | null;
     total_price: number;
     notes: string | null;
@@ -19,6 +21,31 @@ export type EquipmentBooking = {
 export type EquipmentBookingInsert = Omit<EquipmentBooking, "id" | "created_at" | "updated_at">;
 
 const PAYMENT_CONFIRMED_MARKER = "[payment_confirmed_by_seller]";
+const PAYMENT_QR_MARKER = "[payment_qr_url]";
+const PAYMENT_RECEIPT_MARKER = "[payment_receipt_url]";
+
+const stripMarkerLine = (value: string | null | undefined, marker: string) =>
+    String(value || "")
+        .split("\n")
+        .filter((line) => !line.trim().startsWith(marker))
+        .join("\n")
+        .trim();
+
+const stripPaymentQrMarkerLine = (value: string | null | undefined) =>
+    stripMarkerLine(value, PAYMENT_QR_MARKER);
+
+const stripPaymentReceiptMarkerLine = (value: string | null | undefined) =>
+    stripMarkerLine(value, PAYMENT_RECEIPT_MARKER);
+
+const buildNotesWithPaymentQr = (existingNotes: string | null | undefined, qrUrl: string) => {
+    const clean = stripPaymentQrMarkerLine(existingNotes);
+    return `${clean}${clean ? "\n" : ""}${PAYMENT_QR_MARKER} ${qrUrl}`;
+};
+
+const buildNotesWithPaymentReceipt = (existingNotes: string | null | undefined, receiptUrl: string) => {
+    const clean = stripPaymentReceiptMarkerLine(existingNotes);
+    return `${clean}${clean ? "\n" : ""}${PAYMENT_RECEIPT_MARKER} ${receiptUrl}`;
+};
 
 export function getEquipmentPaymentStatus(booking: any): "paid" | "unpaid" {
     const explicitStatus = String(booking?.payment_status || "").toLowerCase();
@@ -32,6 +59,14 @@ export function getEquipmentPaymentStatus(booking: any): "paid" | "unpaid" {
 
 function isMissingPaymentStatusColumnError(error: any): boolean {
     return error?.code === "PGRST204" && String(error?.message || "").includes("payment_status");
+}
+
+function isMissingPaymentQrColumnError(error: any): boolean {
+    return error?.code === "PGRST204" && String(error?.message || "").includes("payment_qr_url");
+}
+
+function isMissingPaymentReceiptColumnError(error: any): boolean {
+    return error?.code === "PGRST204" && String(error?.message || "").includes("payment_receipt_url");
 }
 
 export async function getEquipmentBookings(filters?: {
@@ -55,6 +90,7 @@ export async function getEquipmentBookings(filters?: {
           full_name,
           email,
           phone,
+                    payment_qr_url,
           location,
           state,
           district,
@@ -68,6 +104,7 @@ export async function getEquipmentBookings(filters?: {
         full_name,
         email,
         phone,
+                payment_qr_url,
         location,
           state,
           district,
@@ -117,6 +154,7 @@ export async function getEquipmentBookingById(id: string) {
           full_name,
           email,
           phone,
+                    payment_qr_url,
           location,
           state,
           district,
@@ -130,6 +168,7 @@ export async function getEquipmentBookingById(id: string) {
         full_name,
         email,
         phone,
+                payment_qr_url,
         location,
           state,
           district,
@@ -227,6 +266,13 @@ export async function updateEquipmentBooking(
     id: string,
     updates: Partial<EquipmentBookingInsert>
 ) {
+    const paymentQrUrl = typeof (updates as any).payment_qr_url === "string"
+        ? String((updates as any).payment_qr_url).trim()
+        : "";
+    const paymentReceiptUrl = typeof (updates as any).payment_receipt_url === "string"
+        ? String((updates as any).payment_receipt_url).trim()
+        : "";
+
     const payload = {
         ...updates,
         updated_at: new Date().toISOString(),
@@ -240,6 +286,56 @@ export async function updateEquipmentBooking(
         .single();
 
     if (!error) return data;
+
+    // Compatibility fallback for older schemas missing equipment_bookings.payment_qr_url
+    if (paymentQrUrl && isMissingPaymentQrColumnError(error)) {
+        const existing = await getEquipmentBookingById(id);
+        const notesWithQr = buildNotesWithPaymentQr(existing?.notes, paymentQrUrl);
+        const { payment_qr_url, ...safeUpdates } = (updates as any) || {};
+
+        const { data: fallbackQrData, error: fallbackQrError } = await supabase
+            .from("equipment_bookings")
+            .update({
+                ...safeUpdates,
+                notes: notesWithQr,
+                updated_at: new Date().toISOString(),
+            })
+            .eq("id", id)
+            .select()
+            .single();
+
+        if (fallbackQrError) {
+            console.error("Error updating equipment booking payment QR (fallback path):", fallbackQrError);
+            throw fallbackQrError;
+        }
+
+        return fallbackQrData;
+    }
+
+    // Compatibility fallback for older schemas missing equipment_bookings.payment_receipt_url
+    if (paymentReceiptUrl && isMissingPaymentReceiptColumnError(error)) {
+        const existing = await getEquipmentBookingById(id);
+        const notesWithReceipt = buildNotesWithPaymentReceipt(existing?.notes, paymentReceiptUrl);
+        const { payment_receipt_url, ...safeUpdates } = (updates as any) || {};
+
+        const { data: fallbackReceiptData, error: fallbackReceiptError } = await supabase
+            .from("equipment_bookings")
+            .update({
+                ...safeUpdates,
+                notes: notesWithReceipt,
+                updated_at: new Date().toISOString(),
+            })
+            .eq("id", id)
+            .select()
+            .single();
+
+        if (fallbackReceiptError) {
+            console.error("Error updating equipment booking payment receipt (fallback path):", fallbackReceiptError);
+            throw fallbackReceiptError;
+        }
+
+        return fallbackReceiptData;
+    }
 
     // Compatibility fallback for older schemas missing equipment_bookings.payment_status
     if ("payment_status" in payload && payload.payment_status === "paid" && isMissingPaymentStatusColumnError(error)) {
@@ -345,6 +441,7 @@ export async function getOwnerBookings(ownerId: string) {
                     full_name,
                     email,
                     phone,
+                                    payment_qr_url,
                     location,
                     state,
                     district,
@@ -358,6 +455,7 @@ export async function getOwnerBookings(ownerId: string) {
         full_name,
                 email,
         phone,
+                payment_qr_url,
         location,
           state,
           district,

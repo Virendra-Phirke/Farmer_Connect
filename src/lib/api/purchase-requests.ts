@@ -1,5 +1,31 @@
 import { supabase } from "@/integrations/supabase/client";
 
+const PAYMENT_QR_MARKER = "[payment_qr_url]";
+const PAYMENT_RECEIPT_MARKER = "[payment_receipt_url]";
+
+const stripMarkerLine = (value: string | null | undefined, marker: string) =>
+    String(value || "")
+        .split("\n")
+        .filter((line) => !line.trim().startsWith(marker))
+        .join("\n")
+        .trim();
+
+const stripPaymentQrMarkerLine = (value: string | null | undefined) =>
+    stripMarkerLine(value, PAYMENT_QR_MARKER);
+
+const stripPaymentReceiptMarkerLine = (value: string | null | undefined) =>
+    stripMarkerLine(value, PAYMENT_RECEIPT_MARKER);
+
+const buildMessageWithPaymentQr = (existingMessage: string | null | undefined, qrUrl: string) => {
+    const clean = stripPaymentQrMarkerLine(existingMessage);
+    return `${clean}${clean ? "\n" : ""}${PAYMENT_QR_MARKER} ${qrUrl}`;
+};
+
+const buildMessageWithPaymentReceipt = (existingMessage: string | null | undefined, receiptUrl: string) => {
+    const clean = stripPaymentReceiptMarkerLine(existingMessage);
+    return `${clean}${clean ? "\n" : ""}${PAYMENT_RECEIPT_MARKER} ${receiptUrl}`;
+};
+
 export type PurchaseRequest = {
     id: string;
     buyer_id: string;
@@ -9,6 +35,8 @@ export type PurchaseRequest = {
     message: string | null;
     status: "pending" | "accepted" | "rejected" | "completed";
     payment_status: "unpaid" | "paid";
+    payment_qr_url?: string | null;
+    payment_receipt_url?: string | null;
     billing_id: string | null;
     request_type: "single" | "bulk" | "contract";
     created_at: string;
@@ -32,6 +60,7 @@ export async function getPurchaseRequests(filters?: {
         full_name,
         email,
         phone,
+                payment_qr_url,
         location,
           state,
           district,
@@ -51,6 +80,7 @@ export async function getPurchaseRequests(filters?: {
           full_name,
           phone,
           email,
+                    payment_qr_url,
           location,
           state,
           district,
@@ -160,6 +190,7 @@ export async function getPurchaseRequestById(id: string) {
         full_name,
         email,
         phone,
+                payment_qr_url,
         location,
           state,
           district,
@@ -179,6 +210,7 @@ export async function getPurchaseRequestById(id: string) {
           full_name,
           phone,
           email,
+                    payment_qr_url,
           location,
           state,
           district,
@@ -219,6 +251,12 @@ export async function updatePurchaseRequest(
     updates: Partial<PurchaseRequestInsert>
 ) {
     const baseUpdates = { ...updates } as Record<string, unknown>;
+    const paymentQrUrl = typeof baseUpdates.payment_qr_url === "string"
+        ? String(baseUpdates.payment_qr_url).trim()
+        : "";
+    const paymentReceiptUrl = typeof baseUpdates.payment_receipt_url === "string"
+        ? String(baseUpdates.payment_receipt_url).trim()
+        : "";
 
     const isMissingColumnError = (err: any, column: string) => {
         const msg = String(err?.message || "").toLowerCase();
@@ -286,6 +324,30 @@ export async function updatePurchaseRequest(
         console.warn("[Purchase Request Update] Removing updated_at from payload (column appears missing)");
         delete fallbackPayload.updated_at;
     }
+    if (paymentQrUrl && isMissingColumnError(result.error, "payment_qr_url")) {
+        console.warn("[Purchase Request Update] payment_qr_url missing, storing QR in message field marker");
+        delete fallbackPayload.payment_qr_url;
+
+        const { data: existing } = await supabase
+            .from("purchase_requests")
+            .select("message")
+            .eq("id", id)
+            .maybeSingle();
+
+        fallbackPayload.message = buildMessageWithPaymentQr((existing as any)?.message, paymentQrUrl);
+    }
+    if (paymentReceiptUrl && isMissingColumnError(result.error, "payment_receipt_url")) {
+        console.warn("[Purchase Request Update] payment_receipt_url missing, storing receipt in message field marker");
+        delete fallbackPayload.payment_receipt_url;
+
+        const { data: existing } = await supabase
+            .from("purchase_requests")
+            .select("message")
+            .eq("id", id)
+            .maybeSingle();
+
+        fallbackPayload.message = buildMessageWithPaymentReceipt((existing as any)?.message, paymentReceiptUrl);
+    }
 
     // If nothing changed and still failed, proactively try safest payload
     const shouldTrySafePayload =
@@ -294,7 +356,7 @@ export async function updatePurchaseRequest(
         (result.error as any).status === 400;
 
     if (shouldTrySafePayload) {
-        const { payment_status, billing_id, updated_at, ...safeCore } = baseUpdates as any;
+        const { payment_status, billing_id, payment_qr_url, payment_receipt_url, updated_at, ...safeCore } = baseUpdates as any;
         const minimalPayload = {
             ...safeCore,
             ...(isMissingColumnError(result.error, "updated_at") ? {} : { updated_at: new Date().toISOString() }),

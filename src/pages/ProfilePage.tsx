@@ -1,5 +1,6 @@
 import { useUser } from "@clerk/clerk-react";
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { getUserProfile, updateUserProfile, getUserRole, UserProfile, UserRole, getProfileId } from "@/lib/supabase-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import DashboardLayout from "@/components/DashboardLayout";
-import { Loader2, Save } from "lucide-react";
+import { ArrowLeft, Loader2, QrCode, Save, Upload, X } from "lucide-react";
 import { useFarms } from "@/hooks/useFarms";
 import { FarmsList } from "@/components/FarmsList";
 import { useFarmerEquipment } from "@/hooks/useFarmerEquipment";
@@ -16,6 +17,7 @@ import { useIndianLocations } from "@/hooks/useIndianLocations";
 
 const ProfilePage = () => {
     const { user } = useUser();
+    const navigate = useNavigate();
     const [profile, setProfile] = useState<UserProfile | null>(null);
     const [role, setRole] = useState<UserRole | null>(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -24,6 +26,7 @@ const ProfilePage = () => {
 
     const [phone, setPhone] = useState("");
     const [availableEquipment, setAvailableEquipment] = useState("");
+    const [paymentQrUrl, setPaymentQrUrl] = useState("");
     const [errors, setErrors] = useState<Record<string, string>>({});
 
     // Structured location fields (for all user types)
@@ -39,6 +42,14 @@ const ProfilePage = () => {
     // Use Farms and Equipment Hooks
     const { data: farms, isLoading: farmsLoading } = useFarms(profileId);
     const { data: farmerEquipment, isLoading: equipmentLoading } = useFarmerEquipment(profileId);
+
+    const dashboardPath = role === "farmer"
+        ? "/farmer-dashboard"
+        : role === "equipment_owner"
+            ? "/equipment-dashboard"
+            : role === "hotel_restaurant_manager"
+                ? "/hotel-dashboard"
+                : "/";
 
     useEffect(() => {
         async function load() {
@@ -61,6 +72,7 @@ const ProfilePage = () => {
                 setProfile(profileData);
                 setPhone(profileData.phone || "");
                 setAvailableEquipment(profileData.available_equipment || "");
+                setPaymentQrUrl(profileData.payment_qr_url || "");
 
                 // Load structured location fields
                 setState(profileData.state || "");
@@ -152,6 +164,10 @@ const ProfilePage = () => {
                     updates.available_equipment = equipmentValue;
                 }
             }
+
+            if (paymentQrUrl !== (profile?.payment_qr_url || "")) {
+                updates.payment_qr_url = paymentQrUrl || null;
+            }
             
             // Only send update if something actually changed
             if (Object.keys(updates).length === 0) {
@@ -168,6 +184,7 @@ const ProfilePage = () => {
                 setProfile(updatedProfile);
                 setPhone(updatedProfile.phone || "");
                 setAvailableEquipment(updatedProfile.available_equipment || "");
+                setPaymentQrUrl(updatedProfile.payment_qr_url || "");
             }
             
             toast.success("Profile saved successfully!");
@@ -189,9 +206,39 @@ const ProfilePage = () => {
         );
     }
 
+    const handlePaymentQrUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        if (!file.type.startsWith("image/")) {
+            toast.error("Please upload an image file");
+            return;
+        }
+
+        if (file.size > 5 * 1024 * 1024) {
+            toast.error("QR image size should be less than 5MB");
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = () => {
+            setPaymentQrUrl(String(reader.result || ""));
+            toast.success("Payment QR uploaded. Click Save Profile to publish.");
+        };
+        reader.onerror = () => toast.error("Failed to read QR image");
+        reader.readAsDataURL(file);
+    };
+
     return (
         <DashboardLayout subtitle="">
             <div className="max-w-3xl mx-auto space-y-8">
+                <div className="flex justify-start">
+                    <Button type="button" variant="outline" onClick={() => navigate(dashboardPath)}>
+                        <ArrowLeft className="mr-2 h-4 w-4" />
+                        Go to Dashboard
+                    </Button>
+                </div>
+
                 {/* Personal Info - Appears for all roles */}
                 <section className="bg-card rounded-xl border border-border p-6 space-y-4">
                     <h2 className="font-display text-xl font-semibold">Personal Information</h2>
@@ -334,6 +381,58 @@ const ProfilePage = () => {
                                 <p className="text-xs text-muted-foreground mt-1">Use the 'My Equipment' dashboard page to list individual items for rent.</p>
                             </div>
                         </div>
+                    </section>
+                )}
+
+                {(role === "farmer" || role === "equipment_owner") && (
+                    <section className="bg-card rounded-xl border border-border p-6 space-y-4">
+                        <h2 className="font-display text-xl font-semibold">Payment QR Code</h2>
+                        <p className="text-sm text-muted-foreground">
+                            Buyers will see this QR during payment and can download it with your name.
+                        </p>
+
+                        {paymentQrUrl ? (
+                            <div className="space-y-3">
+                                <div className="w-full max-w-sm rounded-lg border border-border bg-muted/30 p-3">
+                                    <img
+                                        src={paymentQrUrl}
+                                        alt="Your payment QR"
+                                        className="w-full h-auto max-h-72 object-contain rounded-md bg-white"
+                                    />
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                    <Button type="button" variant="outline" asChild>
+                                        <label htmlFor="profilePaymentQrUpload" className="cursor-pointer">
+                                            <Upload className="mr-2 h-4 w-4" />
+                                            Replace QR
+                                        </label>
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        onClick={() => setPaymentQrUrl("")}
+                                    >
+                                        <X className="mr-2 h-4 w-4" />
+                                        Remove QR
+                                    </Button>
+                                </div>
+                            </div>
+                        ) : (
+                            <Button type="button" variant="outline" asChild>
+                                <label htmlFor="profilePaymentQrUpload" className="cursor-pointer">
+                                    <QrCode className="mr-2 h-4 w-4" />
+                                    Upload Payment QR
+                                </label>
+                            </Button>
+                        )}
+
+                        <input
+                            id="profilePaymentQrUpload"
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={handlePaymentQrUpload}
+                        />
                     </section>
                 )}
 

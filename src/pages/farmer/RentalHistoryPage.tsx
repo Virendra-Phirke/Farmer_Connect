@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useUser } from "@clerk/clerk-react";
 import { getProfileId } from "@/lib/supabase-auth";
-import { useEquipmentBookings } from "@/hooks/useEquipmentBookings";
+import { useEquipmentBookings, useUpdateEquipmentBooking } from "@/hooks/useEquipmentBookings";
 import { getEquipmentPaymentStatus } from "@/lib/api/equipment-bookings";
 import DashboardLayout from "@/components/DashboardLayout";
 import { CalendarCheck, Check, X, Clock, FileText } from "lucide-react";
@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { SearchBar } from "@/components/SearchBar";
 import { BillReceiptDialog } from "@/components/BillReceiptDialog";
 import { PageSkeleton } from "@/components/PageSkeleton";
+import { stripPaymentMarkerLines } from "@/lib/payment-markers";
 import { useToast } from "@/hooks/use-toast";
 
 const RentalHistoryPage = () => {
@@ -18,6 +19,7 @@ const RentalHistoryPage = () => {
     const [selectedBooking, setSelectedBooking] = useState<any>(null);
     const [searchQuery, setSearchQuery] = useState("");
     const { toast } = useToast();
+    const updateMutation = useUpdateEquipmentBooking();
 
     const showBill = (booking: any) => {
         const amount = Number(booking.total_price || 0);
@@ -33,6 +35,8 @@ const RentalHistoryPage = () => {
             date: new Date(booking.created_at).toLocaleDateString(),
             amount,
             paymentStatus: getEquipmentPaymentStatus(booking),
+            paymentQrUrl: booking.payment_qr_url || booking.equipment?.owner?.payment_qr_url,
+            paymentReceiptUrl: booking.payment_receipt_url,
             status: booking.status,
             buyer: {
                 id: booking.renter?.id || profileId || undefined,
@@ -71,6 +75,26 @@ const RentalHistoryPage = () => {
             originalRecord: booking
         });
         setIsBillOpen(true);
+    };
+
+    const handleUploadPaymentReceipt = async (paymentReceiptDataUrl: string) => {
+        if (!selectedBooking?.originalRecord?.id) return;
+        try {
+            const updated = await updateMutation.mutateAsync({
+                id: selectedBooking.originalRecord.id,
+                updates: { payment_receipt_url: paymentReceiptDataUrl } as any,
+            });
+
+            setSelectedBooking((prev: any) => prev ? {
+                ...prev,
+                paymentReceiptUrl: paymentReceiptDataUrl,
+                originalRecord: { ...prev.originalRecord, ...(updated || {}), payment_receipt_url: paymentReceiptDataUrl },
+            } : prev);
+
+            toast({ title: "Receipt uploaded", description: "Seller has been notified to verify your payment receipt." });
+        } catch {
+            toast({ title: "Upload failed", description: "Could not upload payment receipt.", variant: "destructive" });
+        }
     };
 
     useEffect(() => {
@@ -122,7 +146,7 @@ const RentalHistoryPage = () => {
                                     <p className="font-semibold text-lg">{booking.equipment?.name || "Equipment"} <span className="text-muted-foreground text-sm font-normal">from {booking.equipment?.owner?.full_name || "Unknown Owner"}</span></p>
                                     <p className="text-sm">Dates: {booking.start_date} → {booking.end_date}</p>
                                     <p className="font-medium mt-1">Total Estimated Cost: ₹{booking.total_price}</p>
-                                    {booking.notes && <p className="text-sm mt-1 text-muted-foreground">Note: {booking.notes}</p>}
+                                    {stripPaymentMarkerLines(booking.notes) && <p className="text-sm mt-1 text-muted-foreground">Note: {stripPaymentMarkerLines(booking.notes)}</p>}
                                 </div>
                                 <div className="flex items-center gap-2">
                                     {getStatusBadge(booking.status)}
@@ -142,6 +166,9 @@ const RentalHistoryPage = () => {
                 onClose={() => setIsBillOpen(false)}
                 billDetails={selectedBooking}
                 canMarkPaid={false}
+                canUploadPaymentReceipt={true}
+                onUploadPaymentReceipt={handleUploadPaymentReceipt}
+                isUploadingPaymentReceipt={updateMutation.isPending}
             />
         </DashboardLayout>
     );

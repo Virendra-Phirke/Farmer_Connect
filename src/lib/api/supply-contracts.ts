@@ -1,5 +1,20 @@
 import { supabase } from "@/integrations/supabase/client";
 
+const PAYMENT_QR_MARKER = "[payment_qr_url]";
+const PAYMENT_RECEIPT_MARKER = "[payment_receipt_url]";
+
+const stripMarkerLine = (value: string | null | undefined, marker: string) =>
+    String(value || "")
+        .split("\n")
+        .filter((line) => !line.trim().startsWith(marker))
+        .join("\n")
+        .trim();
+
+const appendMarkerLine = (existing: string | null | undefined, marker: string, url: string) => {
+    const clean = stripMarkerLine(existing, marker);
+    return `${clean}${clean ? "\n" : ""}${marker} ${url}`;
+};
+
 export type SupplyContract = {
     id: string;
     buyer_id: string;
@@ -12,6 +27,8 @@ export type SupplyContract = {
     price_per_kg: number;
     status: "pending" | "active" | "paused" | "completed" | "cancelled";
     payment_status: "unpaid" | "paid";
+    payment_qr_url?: string | null;
+    payment_receipt_url?: string | null;
     billing_id: string | null;
     created_at: string;
     updated_at: string;
@@ -20,6 +37,8 @@ export type SupplyContract = {
 export type SupplyContractInsert = Omit<SupplyContract, "id" | "created_at" | "updated_at" | "status" | "payment_status" | "billing_id"> & {
     status?: SupplyContract["status"];
     payment_status?: SupplyContract["payment_status"];
+    payment_qr_url?: string | null;
+    payment_receipt_url?: string | null;
     billing_id?: SupplyContract["billing_id"];
     total_amount?: number;
 };
@@ -39,6 +58,7 @@ export async function getSupplyContracts(filters?: {
         full_name,
         email,
         phone,
+                payment_qr_url,
         location,
           state,
           district,
@@ -51,6 +71,7 @@ export async function getSupplyContracts(filters?: {
         full_name,
         email,
         phone,
+                payment_qr_url,
         location,
           state,
           district,
@@ -159,6 +180,7 @@ export async function getSupplyContractById(id: string) {
         full_name,
         email,
         phone,
+                payment_qr_url,
         location,
           state,
           district,
@@ -171,6 +193,7 @@ export async function getSupplyContractById(id: string) {
         full_name,
         email,
         phone,
+                payment_qr_url,
         location,
           state,
           district,
@@ -253,6 +276,21 @@ export async function updateSupplyContract(
     id: string,
     updates: Partial<SupplyContractInsert>
 ) {
+    const paymentQrUrl = typeof (updates as any).payment_qr_url === "string"
+        ? String((updates as any).payment_qr_url).trim()
+        : "";
+    const paymentReceiptUrl = typeof (updates as any).payment_receipt_url === "string"
+        ? String((updates as any).payment_receipt_url).trim()
+        : "";
+
+    const isMissingColumnError = (error: any, column: string) => {
+        const msg = String(error?.message || "").toLowerCase();
+        const details = String(error?.details || "").toLowerCase();
+        const hint = String(error?.hint || "").toLowerCase();
+        const target = column.toLowerCase();
+        return msg.includes(target) || details.includes(target) || hint.includes(target);
+    };
+
     // Try with all fields first
     let { data, error } = await supabase
         .from("supply_contracts")
@@ -264,13 +302,70 @@ export async function updateSupplyContract(
         .select()
         .single();
 
-    // If the error is about payment_status column not existing, retry without it
-    if (error && error.code === "PGRST204" && error.message?.includes("payment_status")) {
-        console.warn("payment_status column not found in schema, updating without it:", error);
-        
-        // Remove payment_status and billing_id from updates
-        const { payment_status, billing_id, ...safeUpdates } = updates;
-        
+    // Compatibility fallback for partial/legacy schemas
+    if (error && error.code === "PGRST204") {
+        const safeUpdates = { ...updates } as Record<string, any>;
+        const missingPaymentQrColumn = isMissingColumnError(error, "payment_qr_url");
+        const missingPaymentReceiptColumn = isMissingColumnError(error, "payment_receipt_url");
+        if (isMissingColumnError(error, "payment_status")) delete safeUpdates.payment_status;
+        if (isMissingColumnError(error, "billing_id")) delete safeUpdates.billing_id;
+        if (missingPaymentQrColumn) delete safeUpdates.payment_qr_url;
+        if (missingPaymentReceiptColumn) delete safeUpdates.payment_receipt_url;
+
+        // Preserve receipt/QR data for legacy schemas by writing marker lines to text fields.
+        if ((missingPaymentQrColumn && paymentQrUrl) || (missingPaymentReceiptColumn && paymentReceiptUrl)) {
+            const { data: existing } = await supabase
+                .from("supply_contracts")
+                .select("notes, message")
+                .eq("id", id)
+                .maybeSingle();
+
+            const currentNotes = String((existing as any)?.notes || "");
+            const currentMessage = String((existing as any)?.message || "");
+
+            let nextNotes = currentNotes;
+            if (missingPaymentQrColumn && paymentQrUrl) {
+                nextNotes = appendMarkerLine(nextNotes, PAYMENT_QR_MARKER, paymentQrUrl);
+            }
+            if (missingPaymentReceiptColumn && paymentReceiptUrl) {
+                nextNotes = appendMarkerLine(nextNotes, PAYMENT_RECEIPT_MARKER, paymentReceiptUrl);
+            }
+
+            let nextMessage = currentMessage;
+            if (missingPaymentQrColumn && paymentQrUrl) {
+                nextMessage = appendMarkerLine(nextMessage, PAYMENT_QR_MARKER, paymentQrUrl);
+            }
+            if (missingPaymentReceiptColumn && paymentReceiptUrl) {
+                nextMessage = appendMarkerLine(nextMessage, PAYMENT_RECEIPT_MARKER, paymentReceiptUrl);
+            }
+
+            // Try notes first, then message if notes column is unavailable in a partial schema.
+            safeUpdates.notes = nextNotes;
+
+            const notesResult = await supabase
+                .from("supply_contracts")
+                .update({
+                    ...safeUpdates,
+                    updated_at: new Date().toISOString(),
+                })
+                .eq("id", id)
+                .select()
+                .single();
+
+            if (!notesResult.error) {
+                return notesResult.data;
+            }
+
+            const notesColumnMissing = isMissingColumnError(notesResult.error, "notes");
+            if (notesColumnMissing) {
+                delete safeUpdates.notes;
+                safeUpdates.message = nextMessage;
+            } else {
+                console.error("Error updating supply contract (notes marker fallback):", notesResult.error);
+                throw notesResult.error;
+            }
+        }
+
         const result = await supabase
             .from("supply_contracts")
             .update({
