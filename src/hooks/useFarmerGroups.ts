@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   getFarmerGroups,
   getFarmerGroupById,
@@ -30,6 +30,11 @@ export function useFarmerGroup(id: string) {
     queryKey: ["farmer-group", id],
     queryFn: () => getFarmerGroupById(id),
     enabled: !!id,
+    staleTime: 30_000,
+    gcTime: 10 * 60_000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: true,
+    placeholderData: keepPreviousData,
   });
 }
 

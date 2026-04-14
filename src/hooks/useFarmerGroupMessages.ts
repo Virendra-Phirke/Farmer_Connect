@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { getGroupMessages, sendGroupMessage, subscribeToGroupMessages, deleteGroupMessage } from "@/lib/api/farmer-group-messages";
 import { supabase } from "@/integrations/supabase/client";
@@ -23,9 +23,13 @@ export function useGroupMessages(groupId: string) {
         queryKey: ["group-messages", groupId],
         queryFn: () => getGroupMessages(groupId),
         enabled: !!groupId,
-        refetchOnWindowFocus: true,
+        staleTime: 10_000,
+        gcTime: 10 * 60_000,
+        refetchOnWindowFocus: false,
         refetchOnReconnect: true,
-        refetchInterval: 5000,
+        refetchInterval: 2500,
+        refetchIntervalInBackground: true,
+        placeholderData: keepPreviousData,
     });
 }
 

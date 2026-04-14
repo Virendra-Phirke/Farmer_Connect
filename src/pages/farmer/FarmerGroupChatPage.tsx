@@ -611,7 +611,10 @@ const FarmerGroupChatPage = () => {
         }
     };
 
-    if ((!isDirectMode && (groupLoading || messagesLoading)) || (isDirectMode && directMessagesLoading && !directMessages)) {
+    const isInitialGroupLoad = !isDirectMode && !group && groupLoading;
+    const isInitialDirectLoad = isDirectMode && !directMessages && directMessagesLoading;
+
+    if (isInitialGroupLoad || isInitialDirectLoad) {
         return (
             <DashboardLayout subtitle="Loading group chat...">
                 <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
@@ -735,10 +738,13 @@ const FarmerGroupChatPage = () => {
                                         key={g.id}
                                         type="button"
                                         onClick={() => {
+                                            if (g.__direct ? (isDirectMode && g.__peerId === selectedDirectPeerId) : g.id === id) {
+                                                return;
+                                            }
                                             if (g.__direct) {
                                                 navigate(`/farmer/groups/direct?tab=chats&peer=${g.__peerId}&name=${encodeURIComponent(g.name || "Farmer")}`);
                                             } else {
-                                                navigate(`/farmer/groups/${g.id}`);
+                                                navigate(`/farmer/groups/${g.id}?tab=groups`);
                                             }
                                         }}
                                         className={`w-full text-left px-3 py-3 border-b border-zinc-100 dark:border-zinc-800 transition-colors relative ${
@@ -872,10 +878,14 @@ const FarmerGroupChatPage = () => {
                                         key={g.id}
                                         type="button"
                                         onClick={() => {
+                                            if (g.__direct ? (isDirectMode && g.__peerId === selectedDirectPeerId) : g.id === id) {
+                                                setShowMobileChats(false);
+                                                return;
+                                            }
                                             if (g.__direct) {
                                                 navigate(`/farmer/groups/direct?tab=chats&peer=${g.__peerId}&name=${encodeURIComponent(g.name || "Farmer")}`);
                                             } else {
-                                                navigate(`/farmer/groups/${g.id}`);
+                                                navigate(`/farmer/groups/${g.id}?tab=groups`);
                                             }
                                             setShowMobileChats(false);
                                         }}
