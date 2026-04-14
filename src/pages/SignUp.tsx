@@ -9,6 +9,7 @@ import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { getClerkErrorMessage } from "@/lib/clerk-errors";
+import { GoogleOneTap } from "@clerk/clerk-react";
 
 const OTP_LENGTH = 6;
 
@@ -175,6 +176,7 @@ const SignUp = () => {
       }
     >
       <div className="space-y-5">
+        <GoogleOneTap />
         {errorMessage && (
           <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
             {errorMessage}

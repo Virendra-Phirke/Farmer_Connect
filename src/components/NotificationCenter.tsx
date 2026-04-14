@@ -10,6 +10,8 @@ import { useOwnerBookings, useEquipmentBookings } from "@/hooks/useEquipmentBook
 import { useSupplyContracts } from "@/hooks/useSupplyContracts";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { formatDistanceToNow, differenceInHours } from "date-fns";
+import { Check } from "lucide-react";
 
 interface NotificationCenterProps {
     open: boolean;
@@ -21,10 +23,22 @@ export const NotificationCenter = ({ open, onOpenChange }: NotificationCenterPro
     const { role } = useUserRole();
     const navigate = useNavigate();
     const [profileId, setProfileId] = useState<string | null>(null);
+    const [hiddenNotificationIds, setHiddenNotificationIds] = useState<string[]>(() => {
+        try {
+            const saved = localStorage.getItem("fc_hidden_notifications");
+            return saved ? JSON.parse(saved) : [];
+        } catch {
+            return [];
+        }
+    });
 
     useEffect(() => {
         if (user?.id) getProfileId(user.id).then(setProfileId);
     }, [user?.id]);
+
+    useEffect(() => {
+        localStorage.setItem("fc_hidden_notifications", JSON.stringify(hiddenNotificationIds));
+    }, [hiddenNotificationIds]);
 
     // Farmers: get pending purchase requests (incoming) - requests from hotels
     const { data: cropRequests, isLoading: cropRequestsLoading } = useFarmerPurchaseRequests(
@@ -64,41 +78,65 @@ export const NotificationCenter = ({ open, onOpenChange }: NotificationCenterPro
 
     const isLoading = cropRequestsLoading || equipmentRequestsLoading || hotelPurchasesLoading || farmerRentalsLoading || hotelContractsLoading || farmerContractsLoading;
 
+    const isRecentAndVisible = (item: any) => {
+        if (!item) return false;
+        
+        // Hide if marked as read
+        if (hiddenNotificationIds.includes(item.id)) return false;
+        
+        // Hide if older than 24 hours
+        if (item.created_at || item.updated_at) {
+            const dateStr = item.created_at || item.updated_at;
+            const hours = differenceInHours(new Date(), new Date(dateStr));
+            if (hours >= 24) return false;
+        }
+        
+        return true;
+    };
+
     const getPendingNotifications = () => {
+        let items: any[] = [];
         if (role === "farmer") {
-            return [
-                ...(cropRequests?.filter((r: any) => r.status === "pending") || []),
-                ...(farmerRentals?.filter((r: any) => r.status === "pending" || r.status === "awaiting_confirmation") || []),
-                ...(farmerContracts?.filter((c: any) => c.status === "pending") || []),
+            items = [
+                ...(cropRequests?.filter((r: any) => r.status === "pending" || r.payment_status === "paid") || []),
+                ...(farmerRentals?.filter((r: any) => r.status === "pending" || r.status === "awaiting_confirmation" || r.payment_status === "paid") || []),
+                ...(farmerContracts?.filter((c: any) => c.status === "pending" || c.status === "active" || c.payment_status === "paid") || []),
             ];
         } else if (role === "equipment_owner") {
-            return (equipmentRequests || []).filter((b: any) => b.status === "pending");
+            items = (equipmentRequests || []).filter((b: any) => b.status === "pending" || b.payment_status === "paid");
         } else if (role === "hotel_restaurant_manager") {
-            return [...(hotelContracts?.filter((c: any) => c.status === "pending") || [])];
+            items = [
+                ...(hotelContracts?.filter((c: any) => c.status === "pending" || c.status === "active" || c.payment_status === "paid") || []),
+                ...(hotelPurchases?.filter((r: any) => r.status === "accepted" || r.payment_status === "paid") || []),
+            ];
         }
-        return [];
+        const uniqueItems = Array.from(new Map(items.map(item => [item.id, item])).values());
+        return uniqueItems.filter(isRecentAndVisible);
     };
 
     const getHistoryNotifications = () => {
+        let items: any[] = [];
         if (role === "farmer") {
-            return [
+            items = [
                 ...(cropRequests?.filter((r: any) => r.status !== "pending") || []),
                 ...(farmerRentals?.filter((r: any) => ["confirmed", "cancelled", "completed"].includes(r.status)) || []),
                 ...(farmerContracts?.filter((c: any) => ["active", "cancelled", "completed"].includes(c.status)) || []),
             ];
         } else if (role === "equipment_owner") {
-            return (equipmentRequests || []).filter((b: any) => b.status !== "pending");
+            items = (equipmentRequests || []).filter((b: any) => b.status !== "pending");
         } else if (role === "hotel_restaurant_manager") {
-            return [
+            items = [
                 ...(hotelPurchases?.filter((r: any) => ["accepted", "rejected"].includes(r.status)) || []),
                 ...(hotelContracts?.filter((c: any) => ["active", "cancelled", "completed"].includes(c.status)) || []),
             ];
         }
-        return [];
+        const uniqueItems = Array.from(new Map(items.map(item => [item.id, item])).values());
+        return uniqueItems.filter(isRecentAndVisible);
     };
 
     const pending = getPendingNotifications();
-    const history = getHistoryNotifications();
+    const pendingIds = new Set(pending.map(i => i.id));
+    const history = getHistoryNotifications().filter(i => !pendingIds.has(i.id));
 
     const detectNotificationType = (item: any): "crop" | "rental" | "equipment" | "contract" | "purchase" => {
         if (item.crop_listing) return "crop";
@@ -127,6 +165,10 @@ export const NotificationCenter = ({ open, onOpenChange }: NotificationCenterPro
         type: "crop" | "rental" | "equipment" | "contract" | "purchase";
         onNavigate: () => void;
     }) => {
+        const handleMarkAsRead = (e: React.MouseEvent) => {
+            e.stopPropagation();
+            setHiddenNotificationIds(prev => [...prev, item.id]);
+        };
         const getStatusColor = (status: string) => {
             switch (status) {
                 case "pending":
@@ -165,22 +207,28 @@ export const NotificationCenter = ({ open, onOpenChange }: NotificationCenterPro
                         </div>
                     );
                 case "rental":
+                    const isPaidRental = item.payment_status === "paid";
                     return (
                         <div className="flex items-start gap-3">
-                            <CalendarCheck className="h-5 w-5 mt-0.5 flex-shrink-0 text-primary" />
+                            <CalendarCheck className={`h-5 w-5 mt-0.5 flex-shrink-0 ${isPaidRental ? "text-green-500" : "text-primary"}`} />
                             <div className="flex-1 min-w-0">
-                                <p className="font-semibold text-sm">{item.equipment?.name || "Equipment"} Rental</p>
+                                <p className="font-semibold text-sm">
+                                    {isPaidRental ? "Payment Received for Rental" : `${item.equipment?.name || "Equipment"} Rental`}
+                                </p>
                                 <p className="text-xs text-muted-foreground">{item.start_date} → {item.end_date}</p>
                                 <p className="text-xs text-muted-foreground mt-1">₹{item.total_price}</p>
                             </div>
                         </div>
                     );
                 case "equipment":
+                    const isPaidEq = item.payment_status === "paid";
                     return (
                         <div className="flex items-start gap-3">
-                            <CalendarCheck className="h-5 w-5 mt-0.5 flex-shrink-0 text-primary" />
+                            <CalendarCheck className={`h-5 w-5 mt-0.5 flex-shrink-0 ${isPaidEq ? "text-green-500" : "text-primary"}`} />
                             <div className="flex-1 min-w-0">
-                                <p className="font-semibold text-sm">Rental Request: {item.equipment?.name || "Equipment"}</p>
+                                <p className="font-semibold text-sm">
+                                    {isPaidEq ? "Payment Confirmed for Equipment" : `Rental Request: ${item.equipment?.name || "Equipment"}`}
+                                </p>
                                 <p className="text-xs text-muted-foreground">
                                     Qty: {item.quantity || 1} unit{(item.quantity || 1) > 1 ? "s" : ""} @ ₹{item.equipment?.price_per_day || 0}/day
                                 </p>
@@ -191,11 +239,15 @@ export const NotificationCenter = ({ open, onOpenChange }: NotificationCenterPro
                         </div>
                     );
                 case "contract":
+                    const isPaidContract = item.payment_status === "paid";
+                    const isAcceptedOffer = item.status === "active";
                     return (
                         <div className="flex items-start gap-3">
-                            <FileText className="h-5 w-5 mt-0.5 flex-shrink-0 text-primary" />
+                            <FileText className={`h-5 w-5 mt-0.5 flex-shrink-0 ${isPaidContract || isAcceptedOffer ? "text-green-500" : "text-primary"}`} />
                             <div className="flex-1 min-w-0">
-                                <p className="font-semibold text-sm">{item.crop_name || "Supply"} Contract</p>
+                                <p className="font-semibold text-sm">
+                                    {isPaidContract ? "Payment Received!" : isAcceptedOffer ? "Offer Accepted!" : `${item.crop_name || "Supply"} Contract`}
+                                </p>
                                 <p className="text-xs text-muted-foreground">
                                     {item.quantity_kg_per_delivery} kg @ ₹{item.price_per_kg}/kg
                                 </p>
@@ -207,11 +259,14 @@ export const NotificationCenter = ({ open, onOpenChange }: NotificationCenterPro
                     );
                 case "purchase": {
                     const total = item.total_amount ?? item.total_price ?? ((item.quantity_kg || 0) * (item.offered_price || 0));
+                    const isPaidPurchase = item.payment_status === "paid";
                     return (
                         <div className="flex items-start gap-3">
-                            <ShoppingCart className="h-5 w-5 mt-0.5 flex-shrink-0 text-primary" />
+                            <ShoppingCart className={`h-5 w-5 mt-0.5 flex-shrink-0 ${isPaidPurchase ? "text-green-500" : "text-primary"}`} />
                             <div className="flex-1 min-w-0">
-                                <p className="font-semibold text-sm">Purchase Request</p>
+                                <p className="font-semibold text-sm">
+                                    {isPaidPurchase ? "Payment Confirmed!" : "Purchase Request"}
+                                </p>
                                 <p className="text-xs text-muted-foreground">₹{total}</p>
                                 <p className="text-xs text-muted-foreground mt-1">Status: {item.status}</p>
                             </div>
@@ -246,6 +301,21 @@ export const NotificationCenter = ({ open, onOpenChange }: NotificationCenterPro
                             ? item.status.charAt(0).toUpperCase() + item.status.slice(1).replace(/_/g, " ")
                             : "Unknown"}
                     </span>
+                    <div className="flex items-center gap-3">
+                        <span className="text-xs text-muted-foreground/70">
+                            {item.created_at ? formatDistanceToNow(new Date(item.created_at), { addSuffix: true }) : ""}
+                        </span>
+                        <div 
+                            role="button"
+                            tabIndex={0}
+                            onClick={handleMarkAsRead}
+                            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors cursor-pointer group px-2 py-1 rounded-md hover:bg-muted"
+                            title="Mark as read"
+                        >
+                            <Check className="h-3.5 w-3.5 group-hover:scale-110 transition-transform" />
+                            <span>Read</span>
+                        </div>
+                    </div>
                 </div>
             </div>
         );

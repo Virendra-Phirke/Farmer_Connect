@@ -4,10 +4,11 @@ import { getProfileId } from "@/lib/supabase-auth";
 import { useEquipmentBookings } from "@/hooks/useEquipmentBookings";
 import { getEquipmentPaymentStatus } from "@/lib/api/equipment-bookings";
 import DashboardLayout from "@/components/DashboardLayout";
-import { Loader2, CalendarCheck, Check, X, Clock, FileText } from "lucide-react";
+import { CalendarCheck, Check, X, Clock, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SearchBar } from "@/components/SearchBar";
 import { BillReceiptDialog } from "@/components/BillReceiptDialog";
+import { PageSkeleton } from "@/components/PageSkeleton";
 import { useToast } from "@/hooks/use-toast";
 
 const RentalHistoryPage = () => {
@@ -107,8 +108,8 @@ const RentalHistoryPage = () => {
                     onSearch={setSearchQuery} 
                 />
 
-                {isLoading ? (
-                    <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
+                {(!profileId || isLoading) ? (
+                    <PageSkeleton type="list" />
                 ) : !bookings?.length ? (
                     <div className="bg-card rounded-xl border border-border p-12 text-center text-muted-foreground">You haven't requested to rent any equipment yet.</div>
                 ) : !filteredBookings?.length ? (

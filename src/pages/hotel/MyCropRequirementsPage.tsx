@@ -15,6 +15,7 @@ import {
     SlidersHorizontal, ShoppingBag,
 } from "lucide-react";
 import { toast } from "sonner";
+import { PageSkeleton } from "@/components/PageSkeleton";
 
 const PAGE_SIZE = 12;
 
@@ -64,6 +65,7 @@ export default function MyCropRequirementsPage() {
     const [newDate, setNewDate]           = useState("");
     const [searchQuery, setSearchQuery]   = useState("");
     const [currentPage, setCurrentPage]   = useState(1);
+    const today = new Date().toISOString().split("T")[0];
 
     useEffect(() => {
         if (user?.id) getProfileId(user.id).then(setProfileId);
@@ -101,7 +103,7 @@ export default function MyCropRequirementsPage() {
 
     const openCreate = async () => {
         if (!(await ensurePhone())) return;
-        setNewCropName(""); setNewQuantity(""); setNewDate("");
+        setNewCropName(""); setNewQuantity(""); setNewDate(today);
         setIsCreating(true);
     };
 
@@ -113,7 +115,7 @@ export default function MyCropRequirementsPage() {
         createReq.mutate(
             { hotel_id: profileId, crop_name: newCropName, quantity_kg: Number(newQuantity), required_by_date: newDate || undefined },
             {
-                onSuccess: () => { setIsCreating(false); setNewCropName(""); setNewQuantity(""); setNewDate(""); toast.success("Demand posted!"); },
+                onSuccess: () => { setIsCreating(false); setNewCropName(""); setNewQuantity(""); setNewDate(today); toast.success("Demand posted!"); },
                 onError:   () => toast.error("Failed to post demand"),
             }
         );
@@ -226,8 +228,9 @@ export default function MyCropRequirementsPage() {
                                                 )}
                                             </button>
                                         </PopoverTrigger>
-                                        <PopoverContent className="w-auto p-0" align="start">
+                                        <PopoverContent className="w-[min(92vw,22rem)] p-2" align="start" sideOffset={8}>
                                             <Calendar
+                                                className="mx-auto"
                                                 mode="single"
                                                 selected={newDate ? new Date(newDate) : undefined}
                                                 onSelect={date => { if (date) setNewDate(date.toISOString().split("T")[0]); }}
@@ -301,15 +304,8 @@ export default function MyCropRequirementsPage() {
 
                 {/* ── CONTENT ───────────────────────────────────────────── */}
 
-                {isLoading ? (
-                    <div className="flex flex-col items-center justify-center py-20
-                        rounded-2xl bg-white dark:bg-gray-900
-                        border border-gray-200 dark:border-gray-700 gap-3">
-                        <div className="w-10 h-10 rounded-full border-[3px]
-                            border-gray-200 dark:border-gray-700 border-t-teal-500 animate-spin" />
-                        <p className="text-sm text-gray-400 dark:text-gray-500">Loading demands…</p>
-                    </div>
-
+                {(!profileId || isLoading) ? (
+                    <PageSkeleton type="grid" />
                 ) : !filteredReqs.length ? (
                     <div className="flex flex-col items-center justify-center py-20 px-6 text-center
                         rounded-2xl border-2 border-dashed border-gray-200 dark:border-gray-700

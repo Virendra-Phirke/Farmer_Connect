@@ -3,12 +3,13 @@ import { useUser } from "@clerk/clerk-react";
 import { getProfileId } from "@/lib/supabase-auth";
 import { useSupplyContracts, useUpdateSupplyContract } from "@/hooks/useSupplyContracts";
 import DashboardLayout from "@/components/DashboardLayout";
-import { Loader2, FileText, Check, X, Clock, Receipt } from "lucide-react";
+import { FileText, Check, X, Clock, Receipt } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { SearchBar } from "@/components/SearchBar";
 import { BillReceiptDialog } from "@/components/BillReceiptDialog";
+import { PageSkeleton } from "@/components/PageSkeleton";
 
 const SupplyContractsPage = () => {
     const { user } = useUser();
@@ -145,8 +146,8 @@ const SupplyContractsPage = () => {
                     onSearch={setSearchQuery} 
                 />
 
-                {isLoading ? (
-                    <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
+                {(!profileId || isLoading) ? (
+                    <PageSkeleton type="list" />
                 ) : (
                     <Tabs defaultValue="pending" className="w-full">
                         <TabsList className="mb-6 grid w-full grid-cols-2 md:w-[400px]">

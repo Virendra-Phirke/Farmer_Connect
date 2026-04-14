@@ -7,6 +7,7 @@ import { Loader2, ShoppingCart, Check, X, Clock, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SearchBar } from "@/components/SearchBar";
 import { BillReceiptDialog } from "@/components/BillReceiptDialog";
+import { PageSkeleton } from "@/components/PageSkeleton";
 
 const PurchaseHistoryPage = () => {
     const { user } = useUser();
@@ -108,8 +109,8 @@ const PurchaseHistoryPage = () => {
                     onSearch={setSearchQuery} 
                 />
 
-                {isLoading ? (
-                    <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
+                {(!profileId || isLoading) ? (
+                    <PageSkeleton type="list" />
                 ) : !requests?.length ? (
                     <div className="bg-card rounded-xl border border-border p-12 text-center text-muted-foreground">You haven't requested to buy any produce yet.</div>
                 ) : !filteredRequests?.length ? (

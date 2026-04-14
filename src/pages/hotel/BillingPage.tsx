@@ -10,6 +10,7 @@ import { BillReceiptDialog } from "@/components/BillReceiptDialog";
 import { getProfileId } from "@/lib/supabase-auth";
 import { usePurchaseRequests } from "@/hooks/usePurchaseRequests";
 import { useSupplyContracts } from "@/hooks/useSupplyContracts";
+import { PageSkeleton } from "@/components/PageSkeleton";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const toDateString = (value?: string) =>
@@ -483,12 +484,7 @@ const BillingPage = () => {
 
                 {/* ── Content ── */}
                 {loading ? (
-                    <div className="flex flex-col items-center justify-center py-20 gap-3
-                        bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800">
-                        <div className="w-9 h-9 rounded-full border-[3px] border-slate-200 dark:border-slate-700 border-t-green-500 animate-spin" />
-                        <p className="text-[12px] text-slate-400 dark:text-slate-500">Loading bills…</p>
-                    </div>
-
+                    <PageSkeleton type="grid" />
                 ) : activeTab === "purchase" ? (
                     !purchaseBills.length ? (
                         <EmptyState icon={Wheat} title="No Purchase Bills Yet"

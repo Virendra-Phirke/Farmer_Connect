@@ -6,11 +6,12 @@ import { useEquipmentBookings } from "@/hooks/useEquipmentBookings";
 import { getEquipmentPaymentStatus } from "@/lib/api/equipment-bookings";
 import DashboardLayout from "@/components/DashboardLayout";
 import {
-    Loader2, FileText, Receipt, Search, Tractor, Calendar,
+    FileText, Receipt, Search, Tractor, Calendar,
     Package, TrendingUp, Wheat, X, ChevronRight,
     IndianRupee, Clock, CheckCircle2,
 } from "lucide-react";
 import { BillReceiptDialog } from "@/components/BillReceiptDialog";
+import { PageSkeleton } from "@/components/PageSkeleton";
 import { toast } from "sonner";
 
 // ─── Status Badge ─────────────────────────────────────────────────────────────
@@ -405,11 +406,7 @@ const MyContractsPage = () => {
 
                 {/* ── Tab content ── */}
                 {loading ? (
-                    <div className="flex flex-col items-center justify-center py-20 gap-3
-                        bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800">
-                        <div className="w-9 h-9 rounded-full border-[3px] border-slate-200 dark:border-slate-700 border-t-green-500 animate-spin" />
-                        <p className="text-[12px] text-slate-400 dark:text-slate-500">Loading…</p>
-                    </div>
+                    <PageSkeleton type="list" />
 
                 ) : activeTab === "contracts" ? (
                     /* Supply Contracts tab */
